@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"golang.org/x/text/width"
 	"math"
 	"math/rand"
 	"sync"
 	"time"
+	"unicode"
 )
 
 type creature struct {
@@ -38,13 +40,29 @@ type ActionIntent struct {
 	TargetY  int
 }
 
+type TickStats struct {
+	Tick           int
+	TotalCreatures int
+	TotalDeaths    int
+	TotalAge       int
+	TotalHealth    int
+	TotalNutrition int
+	Clones         int
+	Eats           int
+	Moves          int
+	FoodAdded      int
+	HealthAdded    int
+	FoodConsumed   int
+}
+
 // TODO //
 // Add combat
 // less likely to fight when; plenty of food, same a parent, same ancestor
 // damage given based on what?
 // damage taken based on what?
 
-// set background color based on amount of food present
+var safeRunes []rune
+var nextRuneIndex int
 
 func main() {
 	rows, cols := 40, 70
@@ -52,19 +70,33 @@ func main() {
 	env := initializeMap(rows, cols, creatureFac)
 	var tickCount int
 
-	tickCh := startTicker(500 * time.Millisecond)
+	tickCh := startTicker(1500 * time.Millisecond)
 
 	for range tickCh {
 		tickCount++
-		simulateTick(env, creatureFac)
-		creatureCount := countCreatures(env)
-		printMap(env, tickCount, creatureCount)
+		var tickStats TickStats
 
-		if creatureCount == 0 {
+		tickStats.Tick = tickCount
+
+		simulateTick(env, creatureFac, &tickStats)
+		tickStats.TotalCreatures = countCreatures(env)
+
+		printMap(env)
+
+		fmt.Printf("\nTick: %d | Creatures: %d | Deaths: %d | Food Added: %d | Food Consumed: %d | Clones: %d | Eats: %d | Moves: %d\n",
+			tickStats.Tick, tickStats.TotalCreatures, tickStats.TotalDeaths, tickStats.FoodAdded, tickStats.FoodConsumed, tickStats.Clones, tickStats.Eats, tickStats.Moves)
+		fmt.Printf("Avg Age: %.1f | Avg Health: %.1f | Avg Nutrition: %.1f\n",
+			float64(tickStats.TotalAge)/float64(tickStats.TotalCreatures), float64(tickStats.TotalHealth)/float64(tickStats.TotalCreatures), float64(tickStats.TotalNutrition)/float64(tickStats.TotalCreatures))
+
+		if tickStats.TotalCreatures == 0 {
 			fmt.Println("All creatures are gone. Simulation ended.")
 			break
 		}
 	}
+}
+
+func init() {
+	safeRunes = buildSingleWidthRunePool(33, 0x02AF) // safe visible range
 }
 
 func startTicker(tickInterval time.Duration) <-chan time.Time {
@@ -105,7 +137,6 @@ func initializeMap(rows int, cols int, createCreature func(p *creature) *creatur
 
 func creatureFactory() func(parent *creature) *creature {
 	n := 1
-	r := 257 // start after control characters
 
 	return func(parent *creature) *creature {
 		var color string
@@ -135,8 +166,8 @@ func creatureFactory() func(parent *creature) *creature {
 
 		c := &creature{
 			num:          n,
-			char:         rune(r),
 			colorCode:    color,
+			char:         nextSafeRune(),
 			parent:       parent,
 			health:       health,
 			maxHealth:    maxHealth,
@@ -157,7 +188,6 @@ func creatureFactory() func(parent *creature) *creature {
 		}
 
 		n++
-		r++
 		return c
 	}
 }
@@ -171,48 +201,60 @@ func flattenCreatureList(env [][]environment) []*creature {
 	}
 	return all
 }
-
-func printMap(env [][]environment, tickCount int, creatureCount int) {
+func printMap(env [][]environment) {
 	var buf bytes.Buffer
-
 	buf.WriteString("\033[H\033[2J") // clear screen
 
 	for i := range env {
 		for j := range env[i] {
 			cell := env[i][j]
+			bg := foodToColor(cell.food)
 			creatures := cell.creatureList
-			if len(creatures) == 0 {
-				bg := foodToColor(cell.food)
+			count := len(creatures)
+
+			switch {
+			case count == 0:
 				buf.WriteString(bg + "   " + "\033[0m")
-			} else if len(creatures) == 1 {
-				fmt.Fprintf(&buf, " %s%c\033[0m ", creatures[0].colorCode, creatures[0].char)
-			} else {
-				first := creatures[0].char
-				fmt.Fprintf(&buf, "%c+%d", first, len(creatures)-1)
+			case count == 1:
+				c := creatures[0]
+				fmt.Fprintf(&buf, "%s %s%c \033[0m", bg, c.colorCode, c.char)
+			case count <= 3:
+				buf.WriteString(bg)
+				for k := range count {
+					c := creatures[k]
+					fmt.Fprintf(&buf, "%s%c", c.colorCode, c.char)
+				}
+				// pad to 3 characters
+				for k := count; k < 3; k++ {
+					buf.WriteByte(' ')
+				}
+				buf.WriteString("\033[0m")
+			default:
+				first := creatures[0]
+				remaining := count - 1
+				fmt.Fprintf(&buf, "%s%s%c+%d\033[0m", bg, first.colorCode, first.char, remaining)
 			}
 		}
 		buf.WriteString("\n")
 	}
-	fmt.Fprintf(&buf, "CreatureCount: %v; TickCount: %v\n", creatureCount, tickCount)
-
-	// Now flush it all at once
 	fmt.Print(buf.String())
 }
 
-func simulateTick(env [][]environment, createCreature func(*creature) *creature) {
+func simulateTick(env [][]environment, createCreature func(*creature) *creature, tickStats *TickStats) {
 	creatures := flattenCreatureList(env)
 
-	processEnvironment(env)
+	processEnvironment(env, tickStats)
 
 	// background simulation actions
 	for _, c := range creatures {
 		c.age++ // age creatures
-		processNutrition(c)
-		processHealth(c)
+		tickStats.TotalAge += c.age
+		processNutrition(c, tickStats)
+		processHealth(c, tickStats)
 	}
 
 	intents := collectIntents(creatures, env)
-	resolveActions(intents, env, createCreature)
+	resolveActions(intents, env, createCreature, tickStats)
 }
 
 func (c *creature) decideAction(env [][]environment) ActionIntent {
@@ -257,14 +299,7 @@ func (c *creature) decideAction(env [][]environment) ActionIntent {
 	}
 }
 
-//func collectIntents(creatures []*creature, env [][]environment) []ActionIntent {
-//	var intents []ActionIntent
-//	for _, c := range creatures {
-//		intents = append(intents, c.decideAction(env))
-//	}
-//	return intents
-//}
-
+// Iterate over each creature and collect their action intentions
 func collectIntents(creatures []*creature, env [][]environment) []ActionIntent {
 	intentCh := make(chan ActionIntent, len(creatures))
 	var wg sync.WaitGroup
@@ -288,25 +323,30 @@ func collectIntents(creatures []*creature, env [][]environment) []ActionIntent {
 	return intents
 }
 
-func resolveActions(intents []ActionIntent, env [][]environment, createCreature func(*creature) *creature) {
+// Iterate over creature intentions.
+//
+//	Group intentions by type
+//	Resovle intentions in desired order
+func resolveActions(intents []ActionIntent, env [][]environment, createCreature func(*creature) *creature, tickStats *TickStats) {
 	// Phase 1: Group intents by type
 	var moveIntents, cloneIntents, eatIntents []ActionIntent
 
 	for _, intent := range intents {
 		switch intent.Type {
 		case "move":
+			tickStats.Moves += 1
 			moveIntents = append(moveIntents, intent)
 		case "clone":
+			tickStats.Clones += 1
 			cloneIntents = append(cloneIntents, intent)
 		case "eat":
+			tickStats.Eats += 1
 			eatIntents = append(eatIntents, intent)
 		}
 	}
-
 	// Phase 2: Resolve in safe order
-	// Optional: shuffle moveIntents to avoid move-order bias
 	for _, intent := range eatIntents {
-		resolveEat(intent, env)
+		resolveEat(intent, env, tickStats)
 	}
 	for _, intent := range cloneIntents {
 		resolveClone(intent, env, createCreature)
@@ -359,22 +399,24 @@ func resolveClone(intent ActionIntent, env [][]environment, createCreature func(
 	parent.health = int(float64(parent.health) * 0.3)
 }
 
-func resolveEat(intent ActionIntent, env [][]environment) {
+func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) {
 	creature := intent.Creature
 	location := &env[creature.Y][creature.X]
 
 	toConsume := min(5, location.food)
 	creature.nutrition += 10 * toConsume
 
+	tickStats.FoodConsumed += toConsume
 	location.food -= toConsume
 }
 
-func processEnvironment(env [][]environment) {
+func processEnvironment(env [][]environment, tickStats *TickStats) {
 	for i := range env {
 		for j := range env[i] {
 			cell := &env[i][j]
 			// Grow food
-			if cell.food < cell.maxFood && rand.Intn(10) == 0 {
+			if cell.food < cell.maxFood && rand.Intn(20) == 0 {
+				tickStats.FoodAdded++
 				cell.food++
 			}
 
@@ -383,7 +425,10 @@ func processEnvironment(env [][]environment) {
 			for _, c := range cell.creatureList {
 				if c.age < c.maxAge && c.health > 0 {
 					newList = append(newList, c)
+				} else {
+					tickStats.TotalDeaths++
 				}
+
 				if countCreatures(env) == 0 {
 					fmt.Println("All creatures are gone. Simulation ended.")
 					break
@@ -394,7 +439,8 @@ func processEnvironment(env [][]environment) {
 	}
 }
 
-func processHealth(c *creature) {
+func processHealth(c *creature, tickStats *TickStats) {
+	tickStats.TotalHealth += c.health
 	if c.health >= c.maxHealth {
 		return
 	}
@@ -402,21 +448,26 @@ func processHealth(c *creature) {
 	pctNutrition := (float64(c.nutrition) / float64(c.maxNutrition)) * 100
 	switch {
 	case pctNutrition <= 25:
+		tickStats.HealthAdded--
 		c.health--
 	case pctNutrition > 50 && pctNutrition < 75:
+		tickStats.HealthAdded += c.metabolism
 		c.health = c.health + c.metabolism
 	case pctNutrition >= 75:
+		tickStats.HealthAdded += (c.metabolism * 2)
 		c.health = c.health + (c.metabolism * 2)
 	}
 
-	// ensure health doesn't exceed maHealth
+	// ensure health doesn't exceed maxHealth
 	c.health = min(c.maxHealth, c.health)
 }
 
-func processNutrition(c *creature) {
+func processNutrition(c *creature, tickStats *TickStats) {
 	c.nutrition -= c.metabolism
+	tickStats.TotalNutrition += c.nutrition
 }
 
+// Create a color to be used by a creature
 func generateColor(index, total int) string {
 	if total <= 0 {
 		total = 1
@@ -426,6 +477,7 @@ func generateColor(index, total int) string {
 	return fmt.Sprintf("\033[38;2;%d;%d;%dm", r, g, b)
 }
 
+// Convert a color from HSV (Hue, Saturation, Value) to RGB (Red, Green, Blue)
 func hsvToRGB(h, s, v float64) (int, int, int) {
 	h = h * 6
 	c := v * s
@@ -453,6 +505,7 @@ func hsvToRGB(h, s, v float64) (int, int, int) {
 	return int((r + m) * 255), int((g + m) * 255), int((b + m) * 255)
 }
 
+// Count total number of creatures in the environment
 func countCreatures(env [][]environment) int {
 	count := 0
 	for i := range env {
@@ -463,24 +516,68 @@ func countCreatures(env [][]environment) int {
 	return count
 }
 
+// Location background color determined by food amount
 func foodToColor(food int) string {
 	switch {
-	case food > 75:
-		return "\033[48;5;34m" // bright green background
+	case food > 100:
+		return "\033[48;5;76m" // bright green background
+	case food > 90:
+		return "\033[48;5;77m" // green
+	case food > 80:
+		return "\033[48;5;34m" // olive
+	case food > 70:
+		return "\033[48;5;35m" // olive
+	case food > 60:
+		return "\033[48;5;28m" // olive
 	case food > 50:
-		return "\033[48;5;28m" // green
-	case food > 25:
-		return "\033[48;5;94m" // olive
-	case food > 0:
-		return "\033[48;5;130m" // brown
+		return "\033[48;5;29m" // olive
+	case food > 40:
+		return "\033[48;5;70m" // olive
+	case food > 30:
+		return "\033[48;5;64m" // olive
+	case food > 20:
+		return "\033[48;5;142m" // olive
+	case food > 10:
+		return "\033[48;5;100m" // olive
+	case food > 5:
+		return "\033[48;5;58m" // olive
+	case food > 1:
+		return "\033[48;5;136m" // brown
 	default:
-		return "\033[0m" // default background
+		return "\033[048;5;94m" // default background
 	}
 }
 
+// Helper function to return min of two integers
 func min(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
+}
+
+func nextSafeRune() rune {
+	if nextRuneIndex >= len(safeRunes) {
+		// fallback if you run out (wrap around or panic/log)
+		nextRuneIndex = 0
+	}
+	r := safeRunes[nextRuneIndex]
+	nextRuneIndex++
+	return r
+}
+
+func buildSingleWidthRunePool(start, end rune) []rune {
+	var runes []rune
+	for r := start; r <= end; r++ {
+		if unicode.IsPrint(r) && isSingleColumnRune(r) {
+			runes = append(runes, r)
+		}
+	}
+	return runes
+}
+
+func isSingleColumnRune(r rune) bool {
+	p := width.LookupRune(r)
+	k := p.Kind()
+	return k == width.Neutral || k == width.EastAsianNarrow || k == width.EastAsianAmbiguous
 }
