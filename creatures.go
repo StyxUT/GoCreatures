@@ -6,6 +6,7 @@ import (
 	"golang.org/x/text/width"
 	"math"
 	"math/rand"
+	"sort"
 	"sync"
 	"time"
 	"unicode"
@@ -25,6 +26,7 @@ type creature struct {
 	metabolism   int
 	nutrition    int
 	maxNutrition int
+	aggression   int
 }
 
 type environment struct {
@@ -41,26 +43,51 @@ type ActionIntent struct {
 }
 
 type TickStats struct {
-	Tick           int
-	TotalCreatures int
-	TotalDeaths    int
-	TotalAge       int
-	TotalHealth    int
-	TotalNutrition int
-	Clones         int
-	Eats           int
-	Moves          int
-	FoodAdded      int
-	HealthAdded    int
-	FoodConsumed   int
+	Tick             int
+	TotalCreatures   int
+	TotalDeaths      int
+	AgeDeaths        int
+	StarvationDeaths int
+	TotalAge         int
+	TotalHealth      int
+	TotalNutrition   int
+	Clones           int
+	Eats             int
+	Moves            int
+	Fights           int
+	FoodAdded        int
+	HealthAdded      int
+	FoodConsumed     int
+}
+
+type AncestryStats struct {
+	Ancestor     *creature
+	LineageCount int
 }
 
 // TODO //
+// Add ancestor reportint
+//
 // Add combat
 // less likely to fight when; plenty of food, same a parent, same ancestor
 // damage given based on what?
 // damage taken based on what?
-
+//
+// Add move cost
+// apply nutrition cost to moving
+//
+// Add rest
+// reducted nutrition cost if nothing done
+// increased healing if needed (normal nutrition cost)
+//
+// Add vision
+// vision score could determine distance, and direction of sight
+//
+//	3 cells (front, front left, front right of last move direction
+//	front left and right/ just front but far?
+//
+// will need to rack the directon of last movement
+// make more intelligent movement like avoid other creatures, or move toward food
 var safeRunes []rune
 var nextRuneIndex int
 
@@ -70,23 +97,20 @@ func main() {
 	env := initializeMap(rows, cols, creatureFac)
 	var tickCount int
 
-	tickCh := startTicker(1500 * time.Millisecond)
+	tickCh := startTicker(100 * time.Millisecond)
 
 	for range tickCh {
 		tickCount++
 		var tickStats TickStats
+		var ancestryStats []AncestryStats
 
 		tickStats.Tick = tickCount
 
 		simulateTick(env, creatureFac, &tickStats)
-		tickStats.TotalCreatures = countCreatures(env)
-
+		collectAncestryStats(env, &ancestryStats)
 		printMap(env)
-
-		fmt.Printf("\nTick: %d | Creatures: %d | Deaths: %d | Food Added: %d | Food Consumed: %d | Clones: %d | Eats: %d | Moves: %d\n",
-			tickStats.Tick, tickStats.TotalCreatures, tickStats.TotalDeaths, tickStats.FoodAdded, tickStats.FoodConsumed, tickStats.Clones, tickStats.Eats, tickStats.Moves)
-		fmt.Printf("Avg Age: %.1f | Avg Health: %.1f | Avg Nutrition: %.1f\n",
-			float64(tickStats.TotalAge)/float64(tickStats.TotalCreatures), float64(tickStats.TotalHealth)/float64(tickStats.TotalCreatures), float64(tickStats.TotalNutrition)/float64(tickStats.TotalCreatures))
+		printTickStats(&tickStats)
+		printAncestryStats(&ancestryStats)
 
 		if tickStats.TotalCreatures == 0 {
 			fmt.Println("All creatures are gone. Simulation ended.")
@@ -112,6 +136,7 @@ func startTicker(tickInterval time.Duration) <-chan time.Time {
 	return tickCh
 }
 
+// Initialize and populate the map
 func initializeMap(rows int, cols int, createCreature func(p *creature) *creature) [][]environment {
 	matrix := make([][]environment, rows)
 	for i := range matrix {
@@ -135,6 +160,7 @@ func initializeMap(rows int, cols int, createCreature func(p *creature) *creatur
 	return matrix
 }
 
+// Generate a creature and set it's characteristics
 func creatureFactory() func(parent *creature) *creature {
 	n := 1
 
@@ -146,6 +172,7 @@ func creatureFactory() func(parent *creature) *creature {
 		var metabolism int
 		var nutrition int
 		var maxNutrition int
+		var aggression int
 
 		if parent == nil {
 			// Set base values for ancestor creatures
@@ -156,12 +183,14 @@ func creatureFactory() func(parent *creature) *creature {
 			metabolism = rand.Intn(25) + 1
 			maxNutrition = rand.Intn(500) + 200
 			nutrition = int(rand.Intn(maxNutrition / 4))
+			aggression = rand.Intn(100)
 		} else {
 			color = parent.ancestor.colorCode
 			maxAge = int(float64(parent.maxAge) * (1 + (rand.Float64()*0.2 - 0.1)))             // set maxAge to parent's max age + or - 10%
 			maxHealth = int(float64(parent.maxHealth) * (1 + (rand.Float64()*0.2 - 0.1)))       // set maxHealth to parent's max health + or - 10%
 			metabolism = int(float64(parent.metabolism) * (1 + (rand.Float64()*0.2 - 0.1)))     // set metabolism to parent's metabolism + or - 10%
 			maxNutrition = int(float64(parent.maxNutrition) * (1 + (rand.Float64()*0.2 - 0.1))) // set maxNutrition to parent's maxNutrition + or - 10%
+			aggression = parent.aggression + (rand.Intn(3) - 1)                                 // add or remove 1
 		}
 
 		c := &creature{
@@ -178,6 +207,7 @@ func creatureFactory() func(parent *creature) *creature {
 			metabolism:   metabolism,
 			nutrition:    nutrition,
 			maxNutrition: maxNutrition,
+			aggression:   aggression,
 		}
 
 		// set root creature's parent and ancestor to be self
@@ -192,6 +222,7 @@ func creatureFactory() func(parent *creature) *creature {
 	}
 }
 
+// Helper function to flatten the creature list
 func flattenCreatureList(env [][]environment) []*creature {
 	var all []*creature
 	for i := range env {
@@ -201,6 +232,8 @@ func flattenCreatureList(env [][]environment) []*creature {
 	}
 	return all
 }
+
+// Print creatures and map
 func printMap(env [][]environment) {
 	var buf bytes.Buffer
 	buf.WriteString("\033[H\033[2J") // clear screen
@@ -240,12 +273,28 @@ func printMap(env [][]environment) {
 	fmt.Print(buf.String())
 }
 
+func printTickStats(tickStats *TickStats) {
+	fmt.Printf("Tick: %d | Creatures: %d | TotalDeaths: %d | AgeDeaths: %d | StarvationDeaths: %d | Clones: %d\nFoodAdded: %d | FoodConsumed: %d | Eats: %d | Moves: %d | Fights: %d\n",
+		tickStats.Tick, tickStats.TotalCreatures, tickStats.TotalDeaths, tickStats.AgeDeaths, tickStats.StarvationDeaths, tickStats.Clones, tickStats.FoodAdded, tickStats.FoodConsumed, tickStats.Eats, tickStats.Moves, tickStats.Fights)
+	fmt.Printf("Avg Age: %.1f | Avg Health: %.1f | Avg Nutrition: %.1f\n",
+		float64(tickStats.TotalAge)/float64(tickStats.TotalCreatures), float64(tickStats.TotalHealth)/float64(tickStats.TotalCreatures), float64(tickStats.TotalNutrition)/float64(tickStats.TotalCreatures))
+}
+
+func printAncestryStats(ancestryStats *[]AncestryStats) {
+	fmt.Println("*** Ancestor Leaderboard ***")
+	for i, a := range *ancestryStats {
+		fmt.Printf("%s%d. Ancestor: %c\t| LineageCount: %d\t| MaxHealth: %d\t| MaxAge: %d\t| MaxNutrition: %d\t| Metabolism: %d\n", a.Ancestor.colorCode, i+1, a.Ancestor.char, a.LineageCount, a.Ancestor.maxHealth, a.Ancestor.maxAge, a.Ancestor.maxNutrition, a.Ancestor.metabolism)
+	}
+}
+
+// Main tick loop
 func simulateTick(env [][]environment, createCreature func(*creature) *creature, tickStats *TickStats) {
 	creatures := flattenCreatureList(env)
 
+	// Environment simulation updates
 	processEnvironment(env, tickStats)
 
-	// background simulation actions
+	// Creature simulation updates
 	for _, c := range creatures {
 		c.age++ // age creatures
 		tickStats.TotalAge += c.age
@@ -257,8 +306,15 @@ func simulateTick(env [][]environment, createCreature func(*creature) *creature,
 	resolveActions(intents, env, createCreature, tickStats)
 }
 
+// Determine which action a creature will take
 func (c *creature) decideAction(env [][]environment) ActionIntent {
 	location := env[c.Y][c.X]
+	// Fight if sharing location with non-relative and aggressive
+	// implementation may need to remove other creatures action
+	//if location.creatureList lenth is > 1
+	//if rand.Intn(101) < c.aggression
+	//and c.parent != other creatures c.parent
+	//...if ancestor is the same drop aggression by 50%
 
 	// Clone if between 20% & 90% maxAge && >= 90% of maxHealth
 	if float64(c.age) >= 0.2*float64(c.maxAge) &&
@@ -270,7 +326,7 @@ func (c *creature) decideAction(env [][]environment) ActionIntent {
 		}
 	}
 
-	//If nutrition is low, and location food > 0 eat
+	// If nutrition is low, and location food > 0 eat
 	if (float64(c.nutrition)/float64(c.maxNutrition)) < 0.95 && location.food > 1 {
 		return ActionIntent{
 			Creature: c,
@@ -323,28 +379,34 @@ func collectIntents(creatures []*creature, env [][]environment) []ActionIntent {
 	return intents
 }
 
-// Iterate over creature intentions.
+// Iterate over creature intentions
 //
 //	Group intentions by type
 //	Resovle intentions in desired order
 func resolveActions(intents []ActionIntent, env [][]environment, createCreature func(*creature) *creature, tickStats *TickStats) {
 	// Phase 1: Group intents by type
-	var moveIntents, cloneIntents, eatIntents []ActionIntent
+	var moveIntents, cloneIntents, eatIntents, fightIntents []ActionIntent
 
 	for _, intent := range intents {
 		switch intent.Type {
+		case "fight":
+			tickStats.Fights++
+			fightIntents = append(fightIntents, intent)
 		case "move":
-			tickStats.Moves += 1
+			tickStats.Moves++
 			moveIntents = append(moveIntents, intent)
 		case "clone":
-			tickStats.Clones += 1
+			tickStats.Clones++
 			cloneIntents = append(cloneIntents, intent)
 		case "eat":
-			tickStats.Eats += 1
+			tickStats.Eats++
 			eatIntents = append(eatIntents, intent)
 		}
 	}
 	// Phase 2: Resolve in safe order
+	for _, intent := range fightIntents {
+		resolveFight(intent, env)
+	}
 	for _, intent := range eatIntents {
 		resolveEat(intent, env, tickStats)
 	}
@@ -356,6 +418,11 @@ func resolveActions(intents []ActionIntent, env [][]environment, createCreature 
 	}
 }
 
+func resolveFight(intent ActionIntent, env [][]environment) {
+
+}
+
+// Resolve "Move" creature action
 func resolveMove(intent ActionIntent, env [][]environment) {
 	c := intent.Creature
 	oldX, oldY := c.X, c.Y
@@ -381,6 +448,7 @@ func resolveMove(intent ActionIntent, env [][]environment) {
 	c.Y = newY
 }
 
+// Resolve "Clone" creature action
 func resolveClone(intent ActionIntent, env [][]environment, createCreature func(*creature) *creature) {
 	parent := intent.Creature
 	x, y := parent.X, parent.Y
@@ -399,6 +467,7 @@ func resolveClone(intent ActionIntent, env [][]environment, createCreature func(
 	parent.health = int(float64(parent.health) * 0.3)
 }
 
+// Resolve "Eat" creature action
 func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) {
 	creature := intent.Creature
 	location := &env[creature.Y][creature.X]
@@ -410,7 +479,13 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 	location.food -= toConsume
 }
 
+// Process environmental updates including removal of dead creatures
 func processEnvironment(env [][]environment, tickStats *TickStats) {
+	totalCreatures := 0
+	totalDeaths := 0
+	ageDeaths := 0
+	starvationDeaths := 0
+
 	for i := range env {
 		for j := range env[i] {
 			cell := &env[i][j]
@@ -420,25 +495,32 @@ func processEnvironment(env [][]environment, tickStats *TickStats) {
 				cell.food++
 			}
 
-			// Remove dead creatures
+			// Manage dead creatures
 			newList := cell.creatureList[:0] // reuse underlying array
 			for _, c := range cell.creatureList {
-				if c.age < c.maxAge && c.health > 0 {
+				switch {
+				case c.age >= c.maxAge:
+					ageDeaths++
+					totalDeaths++
+				case c.health <= 0:
+					starvationDeaths++
+					totalDeaths++
+				default:
 					newList = append(newList, c)
-				} else {
-					tickStats.TotalDeaths++
+					totalCreatures++
 				}
 
-				if countCreatures(env) == 0 {
-					fmt.Println("All creatures are gone. Simulation ended.")
-					break
-				}
+				cell.creatureList = newList
 			}
-			cell.creatureList = newList
 		}
 	}
+	tickStats.TotalCreatures = totalCreatures
+	tickStats.TotalDeaths = totalDeaths
+	tickStats.AgeDeaths = ageDeaths
+	tickStats.StarvationDeaths = starvationDeaths
 }
 
+// Process creature health
 func processHealth(c *creature, tickStats *TickStats) {
 	tickStats.TotalHealth += c.health
 	if c.health >= c.maxHealth {
@@ -458,16 +540,39 @@ func processHealth(c *creature, tickStats *TickStats) {
 		c.health = c.health + (c.metabolism * 2)
 	}
 
-	// ensure health doesn't exceed maxHealth
+	// Ensure health doesn't exceed maxHealth
 	c.health = min(c.maxHealth, c.health)
 }
 
+// Process creature nutrition
 func processNutrition(c *creature, tickStats *TickStats) {
 	c.nutrition -= c.metabolism
 	tickStats.TotalNutrition += c.nutrition
 }
 
-// Create a color to be used by a creature
+// Collect creature ancestry stats
+func collectAncestryStats(env [][]environment, ancestryStats *[]AncestryStats) {
+	creatures := flattenCreatureList(env)
+	var am = make(map[*creature]int)
+	for _, c := range creatures {
+		am[c.ancestor]++
+	}
+	mapToSortedAncestryStats(am, ancestryStats)
+}
+
+// Helper function to sort a map of ancestors
+func mapToSortedAncestryStats(am map[*creature]int, ancestryStats *[]AncestryStats) {
+	stats := make([]AncestryStats, 0, len(am))
+	for a, count := range am {
+		stats = append(stats, AncestryStats{Ancestor: a, LineageCount: count})
+	}
+	sort.Slice(stats, func(i, j int) bool {
+		return stats[i].LineageCount > stats[j].LineageCount
+	})
+	*ancestryStats = stats[:min(5, len(stats))]
+}
+
+// Helper function to create a color to be used by a creature
 func generateColor(index, total int) string {
 	if total <= 0 {
 		total = 1
@@ -477,7 +582,7 @@ func generateColor(index, total int) string {
 	return fmt.Sprintf("\033[38;2;%d;%d;%dm", r, g, b)
 }
 
-// Convert a color from HSV (Hue, Saturation, Value) to RGB (Red, Green, Blue)
+// Helper function to convert a color from HSV (Hue, Saturation, Value) to RGB (Red, Green, Blue)
 func hsvToRGB(h, s, v float64) (int, int, int) {
 	h = h * 6
 	c := v * s
@@ -506,17 +611,19 @@ func hsvToRGB(h, s, v float64) (int, int, int) {
 }
 
 // Count total number of creatures in the environment
-func countCreatures(env [][]environment) int {
-	count := 0
-	for i := range env {
-		for j := range env[i] {
-			count += len(env[i][j].creatureList)
-		}
-	}
-	return count
-}
+//func countCreatures(env [][]environment) int {
+//	count := 0
+//	for i := range env {
+//		for j := range env[i] {
+//			count += len(env[i][j].creatureList)
+//		}
+//	}
+//	return count
+//}
 
-// Location background color determined by food amount
+// Helper function to determine background color
+//
+//	Location background color determined by food amount
 func foodToColor(food int) string {
 	switch {
 	case food > 100:
@@ -556,6 +663,7 @@ func min(a, b int) int {
 	return b
 }
 
+// Helper function to get the next safe (single width) rune
 func nextSafeRune() rune {
 	if nextRuneIndex >= len(safeRunes) {
 		// fallback if you run out (wrap around or panic/log)
@@ -566,6 +674,7 @@ func nextSafeRune() rune {
 	return r
 }
 
+// Helper function to build a list of single width runes
 func buildSingleWidthRunePool(start, end rune) []rune {
 	var runes []rune
 	for r := start; r <= end; r++ {
@@ -576,6 +685,7 @@ func buildSingleWidthRunePool(start, end rune) []rune {
 	return runes
 }
 
+// Helper function to determine if a rune is single with rune
 func isSingleColumnRune(r rune) bool {
 	p := width.LookupRune(r)
 	k := p.Kind()
