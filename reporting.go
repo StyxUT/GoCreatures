@@ -1,6 +1,7 @@
 package main
 
 import (
+	"Creatures/core"
 	"fmt"
 )
 

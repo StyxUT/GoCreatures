@@ -1,19 +1,17 @@
-package main
+package core
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"math/rand"
 	"sort"
 	"sync"
-	"time"
 )
 
-type creature struct {
+type Creature struct {
 	num          int
-	parent       *creature
-	ancestor     *creature
+	parent       *Creature
+	ancestor     *Creature
 	char         rune
 	colorCode    string
 	health       int
@@ -28,148 +26,29 @@ type creature struct {
 }
 
 type environment struct {
-	creatureList []*creature
+	creatureList []*Creature
 	food         int
 	maxFood      int
 }
 
 type ActionIntent struct {
-	Creature       *creature
+	Creature       *Creature
 	Type           string // e.g., "move", "rest", etc.
 	TargetX        int
 	TargetY        int
-	TargetCreature *creature
-}
-
-type TickStats struct {
-	Tick             int
-	TotalCreatures   int
-	TotalDeaths      int
-	AgeDeaths        int
-	StarvationDeaths int
-	FightDeaths      int
-	TotalAge         int
-	TotalHealth      int
-	TotalNutrition   int
-	Clones           int
-	Eats             int
-	Moves            int
-	Fights           int
-	FoodAdded        int
-	HealthAdded      int
-	FoodConsumed     int
+	TargetCreature *Creature
 }
 
 type AncestryStats struct {
-	Ancestor     *creature
+	Ancestor     *Creature
 	LineageCount int
 }
 
-// TODO //
-// Add move cost
-// apply nutrition cost to moving
-//
-// Add rest
-// reducted nutrition cost if nothing done
-// increased healing if needed at normal nutrition cost
-//
-// Add vision
-// vision score could determine distance, and direction of sight
-//
-//		3 cells (front, front left, front right of last move direction
-//		front left and right/ just front but far?
-//	 will need to rack the directon of last movement
-//	 make more intelligent movement like avoid other creatures, or move toward food
-var safeRunes []rune
-var nextRuneIndex int
-
-func main() {
-	rows, cols := 38, 81
-	creatureFac := creatureFactory()
-	env := initializeMap(rows, cols, creatureFac)
-	var tickCount int
-
-	tickCh := startTicker(500 * time.Millisecond)
-
-	for range tickCh {
-		tickCount++
-		var tickStats TickStats
-		var ancestryStats []AncestryStats
-
-		tickStats.Tick = tickCount
-
-		simulateTick(env, creatureFac, &tickStats)
-		collectAncestryStats(env, &ancestryStats)
-		printMap(env)
-		printTickStats(&tickStats)
-
-		fmt.Println("\n*** Ancestor Leaderboard ***")
-		printAncestryStats(&ancestryStats)
-
-		if len(ancestryStats) == 1 {
-			fmt.Println("\n*** Newest Clones ***")
-			creatures := sortCreatureList(env)[:3]
-			var as []AncestryStats
-			for i, c := range creatures {
-				as = append(as, AncestryStats{c, i})
-			}
-			printAncestryStats(&as)
-			break
-		}
-
-		if tickStats.TotalCreatures == 0 {
-			fmt.Println("All creatures are gone. Simulation ended.")
-			break
-		}
-	}
-}
-
-func init() {
-	safeRunes = buildSingleWidthRunePool(33, 0x02AF) // safe visible range
-}
-
-func startTicker(tickInterval time.Duration) <-chan time.Time {
-	ticker := time.NewTicker(tickInterval)
-	tickCh := make(chan time.Time)
-
-	go func() {
-		for t := range ticker.C {
-			tickCh <- t
-		}
-	}()
-
-	return tickCh
-}
-
-// Initialize and populate the map
-func initializeMap(rows int, cols int, createCreature func(p *creature) *creature) [][]environment {
-	matrix := make([][]environment, rows)
-	for i := range matrix {
-		matrix[i] = make([]environment, cols)
-		for j := range matrix[i] {
-			// Set location max and current food
-			maxFood := rand.Intn(80)
-			matrix[i][j].maxFood = maxFood                                            // set max food
-			matrix[i][j].food = int(float64(maxFood) * (float64(rand.Intn(10)) / 20)) // set current food a perentage of maxFood
-
-			// Populate with creatures
-			if rand.Intn(20) != 0 { // populate a subset of the map locations
-				continue
-			}
-			creature := createCreature(nil)
-			creature.X = j
-			creature.Y = i
-			matrix[i][j].creatureList = append(matrix[i][j].creatureList, creature)
-		}
-	}
-	return matrix
-}
-
 // Generate a creature and set it's characteristics
-func creatureFactory() func(parent *creature) *creature {
+func CreatureFactory() func(parent *Creature) *Creature {
 	n := 1
 
-	return func(parent *creature) *creature {
+	return func(parent *Creature) *Creature {
 		var color string
 		var maxAge int
 		var maxHealth int
@@ -193,15 +72,15 @@ func creatureFactory() func(parent *creature) *creature {
 			color = parent.ancestor.colorCode
 			maxAge = int(float64(parent.maxAge) * (1 + (rand.Float64()*0.02 - 0.01)))             // set maxAge to parent's max age + or - 1%
 			maxHealth = int(float64(parent.maxHealth) * (1 + (rand.Float64()*0.02 - 0.01)))       // set maxHealth to parent's max health + or - 1%
-			metabolism = int(float64(parent.metabolism) * (1 + (rand.Float64()*0.02 - 0.01)))     // set metabolism to parent's metabolism + or - 1%
+			metabolism =int(float64(parent.metabolism) * (1 + (rand.Float64()*0.02 - 0.01)))     // set metabolism to parent's metabolism + or - 1%
 			maxNutrition = int(float64(parent.maxNutrition) * (1 + (rand.Float64()*0.02 - 0.01))) // set maxNutrition to parent's maxNutrition + or - 1%
 			aggression = parent.aggression + (rand.Intn(3) - 1)                                   // add or remove 1
 		}
 
-		c := &creature{
+		c := &Creature{
 			num:          n,
 			colorCode:    color,
-			char:         nextSafeRune(),
+			char:         NextSafeRune(),
 			parent:       parent,
 			health:       health,
 			maxHealth:    maxHealth,
@@ -228,8 +107,8 @@ func creatureFactory() func(parent *creature) *creature {
 }
 
 // Helper function to flatten the creature list
-func flattenCreatureList(env [][]environment) []*creature {
-	var all []*creature
+func flattenCreatureList(env [][]environment) []*Creature {
+	var all []*Creature
 	for i := range env {
 		for j := range env[i] {
 			all = append(all, env[i][j].creatureList...)
@@ -238,73 +117,14 @@ func flattenCreatureList(env [][]environment) []*creature {
 	return all
 }
 
-// Print creatures and map
-func printMap(env [][]environment) {
-	var buf bytes.Buffer
-	buf.WriteString("\033[H\033[2J") // clear screen
-
-	for i := range env {
-		for j := range env[i] {
-			cell := env[i][j]
-			bg := foodToColor(cell.food)
-			creatures := cell.creatureList
-			count := len(creatures)
-
-			switch {
-			case count == 0:
-				buf.WriteString(bg + "   " + "\033[0m")
-			case count == 1:
-				c := creatures[0]
-				fmt.Fprintf(&buf, "%s %s%c \033[0m", bg, c.colorCode, c.char)
-			case count <= 3:
-				buf.WriteString(bg)
-				for k := range count {
-					c := creatures[k]
-					fmt.Fprintf(&buf, "%s%c", c.colorCode, c.char)
-				}
-				// pad to 3 characters
-				for k := count; k < 3; k++ {
-					buf.WriteByte(' ')
-				}
-				buf.WriteString("\033[0m")
-			default:
-				first := creatures[0]
-				remaining := count - 1
-				fmt.Fprintf(&buf, "%s%s%c+%d\033[0m", bg, first.colorCode, first.char, remaining)
-			}
-		}
-		buf.WriteString("\n")
-	}
-	fmt.Print(buf.String())
-}
-
-// Main tick loop
-func simulateTick(env [][]environment, createCreature func(*creature) *creature, tickStats *TickStats) {
-	creatures := flattenCreatureList(env)
-
-	// Environment simulation updates
-	processEnvironment(env, tickStats)
-
-	// Creature simulation updates
-	for _, c := range creatures {
-		c.age++ // age creatures
-		tickStats.TotalAge += c.age
-		processNutrition(c, tickStats)
-		processHealth(c, tickStats)
-	}
-
-	intents := collectIntents(creatures, env)
-	resolveActions(intents, env, createCreature, tickStats)
-}
-
 // Iterate over each creature and collect their action intentions
-func collectIntents(creatures []*creature, env [][]environment) []ActionIntent {
+func collectIntents(creatures []*Creature, env [][]environment) []ActionIntent {
 	intentCh := make(chan ActionIntent, len(creatures))
 	var wg sync.WaitGroup
 
 	for _, c := range creatures {
 		wg.Add(1)
-		go func(cr *creature) {
+		go func(cr *Creature) {
 			defer wg.Done()
 			intent := cr.decideAction(env)
 			intentCh <- intent
@@ -363,7 +183,7 @@ func processEnvironment(env [][]environment, tickStats *TickStats) {
 }
 
 // Process creature health
-func processHealth(c *creature, tickStats *TickStats) {
+func processHealth(c *Creature, tickStats *TickStats) {
 	tickStats.TotalHealth += c.health
 	if c.health >= c.maxHealth {
 		return
@@ -387,13 +207,13 @@ func processHealth(c *creature, tickStats *TickStats) {
 }
 
 // Process creature nutrition
-func processNutrition(c *creature, tickStats *TickStats) {
+func processNutrition(c *Creature, tickStats *TickStats) {
 	c.nutrition -= c.metabolism
 	tickStats.TotalNutrition += c.nutrition
 }
 
 // Helper function to sort the creature list by creature.num
-func sortCreatureList(env [][]environment) []*creature {
+func SortCreatureList(env [][]environment) []*Creature {
 	creatures := flattenCreatureList(env)
 
 	sort.Slice(creatures, func(i, j int) bool {
@@ -403,7 +223,7 @@ func sortCreatureList(env [][]environment) []*creature {
 }
 
 // Helper function to sort a map of ancestors
-func mapToSortedAncestryStats(am map[*creature]int, ancestryStats *[]AncestryStats) {
+func mapToSortedAncestryStats(am map[*Creature]int, ancestryStats *[]AncestryStats) {
 	stats := make([]AncestryStats, 0, len(am))
 	for a, count := range am {
 		stats = append(stats, AncestryStats{Ancestor: a, LineageCount: count})
@@ -504,4 +324,3 @@ func min(a, b int) int {
 	}
 	return b
 }
-

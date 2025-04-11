@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"math/rand"
@@ -6,10 +6,10 @@ import (
 )
 
 // Determine which action a creature will take
-func (c *creature) decideAction(env [][]environment) ActionIntent {
+func (c *Creature) decideAction(env [][]environment) ActionIntent {
 	location := env[c.Y][c.X]
 	modAggression := c.aggression
-	var targetCreature *creature
+	var targetCreature *Creature
 
 	// Fight sharing location with non-relative, healthy, and aggressive
 	if len(location.creatureList) > 1 &&
@@ -81,7 +81,7 @@ func (c *creature) decideAction(env [][]environment) ActionIntent {
 //
 //	Group intentions by type
 //	Resovle intentions in desired order
-func resolveActions(intents []ActionIntent, env [][]environment, createCreature func(*creature) *creature, tickStats *TickStats) {
+func resolveActions(intents []ActionIntent, env [][]environment, createCreature func(*Creature) *Creature, tickStats *TickStats) {
 	// Phase 1: Group intents by type
 	var moveIntents, cloneIntents, eatIntents, fightIntents []ActionIntent
 
@@ -166,7 +166,7 @@ func resolveMove(intent ActionIntent, env [][]environment) {
 }
 
 // Resolve "Clone" creature action
-func resolveClone(intent ActionIntent, env [][]environment, createCreature func(*creature) *creature) {
+func resolveClone(intent ActionIntent, env [][]environment, createCreature func(*Creature) *Creature) {
 	parent := intent.Creature
 	x, y := parent.X, parent.Y
 

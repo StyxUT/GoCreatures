@@ -6,7 +6,7 @@ import (
 )
 
 // Helper function to get the next safe (single width) rune
-func nextSafeRune() rune {
+func NextSafeRune() rune {
 	if nextRuneIndex >= len(safeRunes) {
 		// fallback if you run out (wrap around or panic/log)
 		nextRuneIndex = 0
