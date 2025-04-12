@@ -21,6 +21,7 @@ type TickStats struct {
 	Eats             int
 	Moves            int
 	Fights           int
+	Sleeps int
 	FoodAdded        int
 	HealthAdded      int
 	FoodConsumed     int

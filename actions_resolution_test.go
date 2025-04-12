@@ -4,6 +4,51 @@ import (
 	"testing"
 )
 
+// Test that a creature involved in a fight does not take any other action
+func TestResolveActions_SkipEatAfterFight(t *testing.T) {
+	// Arrange: create two creatures that will fight
+	attacker := &Creature{X: 1, Y: 1, health: 100, nutrition: 50}
+	defender := &Creature{X: 1, Y: 1, health: 100, nutrition: 50}
+
+	// Place them in the same environment cell with food
+	env := make([][]environment, 3)
+	for i := range env {
+		env[i] = make([]environment, 3)
+	}
+	env[1][1].creatureList = []*Creature{attacker, defender}
+	env[1][1].food = 5
+
+	stats := &TickStats{}
+
+	// Intent 1: fight
+	fightIntent := ActionIntent{
+		Creature:       attacker,
+		TargetCreature: defender,
+		Type:           "fight",
+	}
+
+	// Intent 2: attacker also tries to eat in same tick
+	eatIntent := ActionIntent{
+		Creature: attacker,
+		Type:     "eat",
+	}
+
+	// Act
+	resolveActions([]ActionIntent{fightIntent, eatIntent}, env, func(c *Creature) *Creature {
+		return &Creature{maxHealth: 100, maxNutrition: 100}
+	}, stats)
+
+	// Assert
+	expectedNutrition := 50 - 10*2 // lost 10 during fight (2 rounds)
+	if attacker.nutrition != expectedNutrition {
+		t.Errorf("expected nutrition to be %d, got %d (eat should be skipped)", expectedNutrition, attacker.nutrition)
+	}
+
+	if env[1][1].food != 5 {
+		t.Errorf("expected food to remain at 5 (no eating), got %d", env[1][1].food)
+	}
+}
+
 // Test creature cloaning
 func TestResolveClone(t *testing.T) {
 	// Arrange
