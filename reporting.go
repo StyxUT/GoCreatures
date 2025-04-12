@@ -1,14 +1,13 @@
 package main
 
 import (
-	"Creatures/core"
 	"fmt"
 )
 
 // Collect creature ancestry stats
 func collectAncestryStats(env [][]environment, ancestryStats *[]AncestryStats) {
 	creatures := flattenCreatureList(env)
-	var am = make(map[*creature]int)
+	var am = make(map[*Creature]int)
 	for _, c := range creatures {
 		am[c.ancestor]++
 	}

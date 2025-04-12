@@ -1,4 +1,4 @@
-package testhelpers
+package main
 
 func DeadCreature() *Creature {
 	return &Creature{
@@ -19,5 +19,11 @@ func StarvingCreature() *Creature {
 func AggressiveCreature() *Creature {
 	return &Creature{
 		aggression: 100,
+	}
+}
+
+func HealthyCreature() *Creature {
+	return &Creature{
+		health:100,
 	}
 }

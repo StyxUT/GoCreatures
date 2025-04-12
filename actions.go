@@ -1,4 +1,4 @@
-package core
+package main
 
 import (
 	"math/rand"
@@ -121,7 +121,7 @@ func resolveFight(intent ActionIntent, tickStats *TickStats) {
 	tc := intent.TargetCreature
 
 	// two attacks each
-	for i := 2; i < 2; i++ {
+	for range 2 {
 		if c.health > 0 {
 			cAttack := int((c.health + c.nutrition) / 5)
 			tc.health -= cAttack

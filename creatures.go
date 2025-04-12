@@ -1,4 +1,4 @@
-package core
+package main
 
 import (
 	"fmt"
@@ -72,7 +72,7 @@ func CreatureFactory() func(parent *Creature) *Creature {
 			color = parent.ancestor.colorCode
 			maxAge = int(float64(parent.maxAge) * (1 + (rand.Float64()*0.02 - 0.01)))             // set maxAge to parent's max age + or - 1%
 			maxHealth = int(float64(parent.maxHealth) * (1 + (rand.Float64()*0.02 - 0.01)))       // set maxHealth to parent's max health + or - 1%
-			metabolism =int(float64(parent.metabolism) * (1 + (rand.Float64()*0.02 - 0.01)))     // set metabolism to parent's metabolism + or - 1%
+			metabolism = int(float64(parent.metabolism) * (1 + (rand.Float64()*0.02 - 0.01)))     // set metabolism to parent's metabolism + or - 1%
 			maxNutrition = int(float64(parent.maxNutrition) * (1 + (rand.Float64()*0.02 - 0.01))) // set maxNutrition to parent's maxNutrition + or - 1%
 			aggression = parent.aggression + (rand.Intn(3) - 1)                                   // add or remove 1
 		}

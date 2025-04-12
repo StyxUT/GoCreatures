@@ -11,7 +11,7 @@ func TestNextSafeRune(t *testing.T) {
 
 	tests := []rune{'α', 'β', 'γ', 'α', 'β'}
 	for i, expected := range tests {
-		r := nextSafeRune()
+		r := NextSafeRune()
 		if r != expected {
 			t.Errorf("Test %d: expected %q, got %q", i, expected, r)
 		}

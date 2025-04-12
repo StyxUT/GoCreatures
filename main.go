@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 	"time"
-	"Creatures/core"
+	"math/rand"
+	"bytes"
 )
 
 type TickStats struct {
@@ -24,8 +25,6 @@ type TickStats struct {
 	HealthAdded      int
 	FoodConsumed     int
 }
-
-
 
 // TODO //
 // Add move cost
@@ -51,7 +50,7 @@ func main() {
 	env := initializeMap(rows, cols, creatureFac)
 	var tickCount int
 
-	tickCh := startTicker(500 * time.Millisecond)
+	tickCh := startTicker(300 * time.Millisecond)
 
 	for range tickCh {
 		tickCount++
@@ -104,7 +103,7 @@ func startTicker(tickInterval time.Duration) <-chan time.Time {
 }
 
 // Initialize and populate the map
-func initializeMap(rows int, cols int, createCreature func(p *creature) *creature) [][]environment {
+func initializeMap(rows int, cols int, createCreature func(p *Creature) *Creature) [][]environment {
 	matrix := make([][]environment, rows)
 	for i := range matrix {
 		matrix[i] = make([]environment, cols)
@@ -185,4 +184,3 @@ func printMap(env [][]environment) {
 	}
 	fmt.Print(buf.String())
 }
-
