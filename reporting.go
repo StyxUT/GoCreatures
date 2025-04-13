@@ -26,3 +26,13 @@ func printAncestryStats(ancestryStats *[]AncestryStats) {
 		fmt.Printf("%s%d. Ancestor: %c\t| LineageCount: %d\t| MaxHealth: %d\t| MaxAge: %d\t| MaxNutrition: %d\t| Metabolism: %d \t| Aggression: %d\n", a.Ancestor.colorCode, i+1, a.Ancestor.char, a.LineageCount, a.Ancestor.maxHealth, a.Ancestor.maxAge, a.Ancestor.maxNutrition, a.Ancestor.metabolism, a.Ancestor.aggression)
 	}
 }
+
+func printNewestClones(env [][]environment){
+			fmt.Println("\n*** Newest Clones ***")
+			creatures := SortCreatureList(env)[:min(len(env), 3)]
+			var as []AncestryStats
+			for i, c := range creatures {
+				as = append(as, AncestryStats{c, i})
+			}
+			printAncestryStats(&as)
+}

@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
-	"time"
-	"math/rand"
 	"bytes"
+	"fmt"
+	"math/rand"
+	"time"
 )
 
 type TickStats struct {
@@ -21,27 +21,15 @@ type TickStats struct {
 	Eats             int
 	Moves            int
 	Fights           int
-	Sleeps int
+	Sleeps           int
 	FoodAdded        int
 	HealthAdded      int
 	FoodConsumed     int
 }
 
 // TODO //
-// Add move cost
-// apply nutrition cost to moving
-//
-// Add rest
-// reducted nutrition cost if nothing done
-// increased healing if needed at normal nutrition cost
-//
-// Add vision
-// vision score could determine distance, and direction of sight
-//
-//		3 cells (front, front left, front right of last move direction
-//		front left and right/ just front but far?
-//	 will need to rack the directon of last movement
-//	 make more intelligent movement like avoid other creatures, or move toward food
+// Use creature vision
+// make more intelligent movement like avoid other creatures, or move toward food
 var safeRunes []rune
 var nextRuneIndex int
 
@@ -69,13 +57,7 @@ func main() {
 		printAncestryStats(&ancestryStats)
 
 		if len(ancestryStats) == 1 {
-			fmt.Println("\n*** Newest Clones ***")
-			creatures := SortCreatureList(env)[:3]
-			var as []AncestryStats
-			for i, c := range creatures {
-				as = append(as, AncestryStats{c, i})
-			}
-			printAncestryStats(&as)
+			printNewestClones(env)
 			break
 		}
 
