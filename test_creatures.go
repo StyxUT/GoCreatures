@@ -24,6 +24,18 @@ func AggressiveCreature() *Creature {
 
 func HealthyCreature() *Creature {
 	return &Creature{
-		health:100,
+		health: 100,
+	}
+}
+
+func HighVisionCreature() *Creature {
+	return &Creature{
+		vision: 20.11,
+	}
+}
+
+func LowVisionCreature() *Creature {
+	return &Creature{
+		vision: 0.11,
 	}
 }

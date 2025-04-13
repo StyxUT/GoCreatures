@@ -8,9 +8,14 @@ import (
 // Determine which action a creature will take
 func (c *Creature) decideAction(env [][]environment) ActionIntent {
 	location := env[c.Y][c.X]
+
+	// Observe area based on current location and vision
+	SpiralLook2D_N(env, c, func(x, y int){
+		c.observed = append(c.observed, &env[x][y])
+	})
+
 	modAggression := c.aggression
 	var targetCreature *Creature
-
 	// Fight if sharing location with non-relative, healthy, and aggressive
 	if len(location.creatureList) > 1 &&
 		float64(c.health) > (float64(c.maxHealth)*0.75) {
@@ -145,6 +150,7 @@ func resolveActions(intents []ActionIntent, env [][]environment, createCreature 
   }
 }
 
+// Resolve "Fight" action
 func resolveFight(intent ActionIntent, tickStats *TickStats) {
 	c := intent.Creature
 	tc := intent.TargetCreature
@@ -240,4 +246,3 @@ func resolveSleep(intent ActionIntent, tickStats *TickStats) {
 	processHealth(c, tickStats)
 }
 
-	
