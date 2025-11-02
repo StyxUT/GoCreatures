@@ -1,5 +1,8 @@
 package main
 
+// Deterministic decision tests rely on test_seed.go initializing RNG with seed 1.
+// These tests assert movement direction and fight triggering remain stable across runs.
+
 import (
 	"testing"
 )
@@ -322,5 +325,68 @@ func TestResolveActionIntentCounts(t *testing.T) {
 	}
 	if tickStats.Clones != 1 {
 		t.Errorf("Expected clones count of 1, but got %d", tickStats.Clones)
+	}
+}
+
+// Test deterministic wander direction given seed 1: first Intn(4)=1 -> west
+func TestDecideAction_WanderDeterministic(t *testing.T) {
+	ResetRand(1)
+	// Arrange a creature that skips all earlier branches.
+	c := &Creature{X: 1, Y: 1, health: 60, maxHealth: 100, age: 0, maxAge: 100, nutrition: 50, maxNutrition: 100, aggression: 0, vision: 0}
+	env := make([][]environment, 3)
+	for i := range env {
+		env[i] = make([]environment, 3)
+	}
+	env[1][1].creatureList = []*Creature{c}
+	// Act
+	intent := c.decideAction(env)
+	// Assert
+	if intent.Type != "move" {
+		t.Fatalf("expected move intent, got %s", intent.Type)
+	}
+	if intent.TargetX != 0 || intent.TargetY != 1 {
+		t.Fatalf("expected target (0,1) (west), got (%d,%d)", intent.TargetX, intent.TargetY)
+	}
+}
+
+// Test deterministic fight triggering when aggression > first Intn(100)=81
+func TestDecideAction_FightTriggeredDeterministic(t *testing.T) {
+	ResetRand(1)
+	parentA := &Creature{}
+	parentB := &Creature{}
+	c1 := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 0, maxAge: 100, nutrition: 50, maxNutrition: 100, aggression: 90, vision: 0, parent: parentA, ancestor: &Creature{num: 1}}
+	c2 := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 0, maxAge: 100, nutrition: 50, maxNutrition: 100, aggression: 10, vision: 0, parent: parentB, ancestor: &Creature{num: 2}}
+	env := make([][]environment, 3)
+	for i := range env {
+		env[i] = make([]environment, 3)
+	}
+	env[1][1].creatureList = []*Creature{c1, c2}
+	intent := c1.decideAction(env)
+	if intent.Type != "fight" {
+		t.Fatalf("expected fight intent, got %s", intent.Type)
+	}
+	if intent.TargetCreature != c2 {
+		t.Fatalf("expected target creature c2")
+	}
+}
+
+// Test deterministic non-fight falls through to wander using second Intn(4)=3 -> north
+func TestDecideAction_FightNotTriggeredDeterministic(t *testing.T) {
+	ResetRand(1)
+	parentA := &Creature{}
+	parentB := &Creature{}
+	c1 := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 0, maxAge: 100, nutrition: 50, maxNutrition: 100, aggression: 10, vision: 0, parent: parentA, ancestor: &Creature{num: 1}}
+	c2 := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 0, maxAge: 100, nutrition: 50, maxNutrition: 100, aggression: 10, vision: 0, parent: parentB, ancestor: &Creature{num: 2}}
+	env := make([][]environment, 3)
+	for i := range env {
+		env[i] = make([]environment, 3)
+	}
+	env[1][1].creatureList = []*Creature{c1, c2}
+	intent := c1.decideAction(env)
+	if intent.Type != "move" {
+		t.Fatalf("expected move intent after non-triggered fight, got %s", intent.Type)
+	}
+	if intent.TargetX != 1 || intent.TargetY != 0 {
+		t.Fatalf("expected target (1,0) (north), got (%d,%d)", intent.TargetX, intent.TargetY)
 	}
 }
