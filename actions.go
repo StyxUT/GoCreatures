@@ -9,17 +9,17 @@ import (
 func (c *Creature) decideAction(env [][]environment) ActionIntent {
 	location := env[c.Y][c.X]
 
+	pctHealth := float64(c.health) / float64(c.maxHealth) * 100
+	pctAge := float64(c.age) / float64(c.maxAge) * 100
+	pctNutrition := float64(c.nutrition) / float64(c.maxNutrition) * 100
+
 	// Observe area based on current location and vision
-	SpiralLook2D_N(env, c, func(x, y int){
-		c.observed = append(c.observed, &env[x][y])
-	})
+	SpiralLook2D_N(env, c)
 
 	modAggression := c.aggression
 	var targetCreature *Creature
 	// Fight if sharing location with non-relative, healthy, and aggressive
-	if len(location.creatureList) > 1 &&
-		float64(c.health) > (float64(c.maxHealth)*0.75) {
-
+	if len(location.creatureList) > 1 && pctHealth > 50 {
 		// Find first non-self, non-parent creature at the same location
 		for _, tc := range location.creatureList {
 			if tc != c && tc.parent != nil && c.parent != nil && tc.parent != c.parent {
@@ -30,7 +30,7 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 
 		// Reduce aggression by 50% if shared ancestor
 		if targetCreature != nil && targetCreature.ancestor.num == c.ancestor.num {
-			modAggression = int(modAggression / 2) // if share ancestor cut aggression by 50%
+			modAggression = int(modAggression / 3) // if share ancestor cut aggression by 66%
 		}
 
 		// Fight if aggressive enough
@@ -44,42 +44,75 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 	}
 
 	// Clone if between 20% & 90% maxAge && >= 70% of maxHealth
-	if float64(c.age) >= 0.2*float64(c.maxAge) &&
-		float64(c.age) < 0.9*float64(c.maxAge) &&
-		float64(c.health) >= 0.75*float64(c.maxHealth) {
+	if pctAge > 20 && pctAge < 90 && pctHealth > 70 {
+
 		return ActionIntent{
 			Creature: c,
 			Type:     "clone",
 		}
 	}
 
+	// If hungry and location.food is low, try to move toward more food
+	// 		TODO: reduce location preference if others are in the area
+	SortEnvironmentListByFood(c.observed)
+	if len(c.observed) > 0 && pctNutrition > 30 && pctNutrition < 70 && location.food < 30 && location.food < c.observed[0].Env.food {
+	  target := c.observed[0]
+		dx := sign(target.X - c.X)
+		dy := sign(target.Y - c.Y)
+
+		return ActionIntent{
+			Creature: c,
+			Type:     "move",
+			TargetX:  c.X + dx,
+			TargetY:  c.Y + dy,
+		}
+	}
+
 	// If nutrition is low, and location food > 0 eat
-	if float64(c.nutrition)/float64(c.maxNutrition) < 0.95 && location.food > 1 {
+	if pctNutrition <= 40 && location.food > 1 {
 		return ActionIntent{
 			Creature: c,
 			Type:     "eat",
 		}
 	}
 
-	// If nutrition is high, or health is low and > 50% nutrition, sleep
-	if float64(c.nutrition)/float64(c.maxNutrition) > 0.80 || (float64(c.nutrition)/float64(c.maxNutrition) > 0.50 && float64(c.health)/float64(c.maxHealth) < 0.50) {
+	// If crowded move toward an empty location 
+	if len(c.observed) > 0 && len(location.creatureList) > 2 {
+	  SortEnvironmentListByOccupantsDesc(c.observed)
+	  target := c.observed[0]
+		dx := sign(target.X - c.X)
+		dy := sign(target.Y - c.Y)
+
 		return ActionIntent{
 			Creature: c,
-			Type: "sleep",
+			Type:     "move",
+			TargetX:  c.X + dx,
+			TargetY:  c.Y + dy,
 		}
 	}
 
-	// Choose random direction: N, S, E, W
+
+	// If nutrition is high, or health is low and > 20% nutrition, sleep
+	if pctNutrition > 70 || (pctNutrition > 40 && pctHealth < 60) {
+		return ActionIntent{
+			Creature: c,
+			Type:     "sleep",
+		}
+	}
+
+	// If high health and aggressive, move toward enemy
+
+	// If no other action, wonder in random direction: N, S, E, W
 	dx, dy := 0, 0
 	switch rand.Intn(4) {
-	  case 0:
-	  	dx = 1 // east
-	  case 1:
-	  	dx = -1 // west
-	  case 2:
-	  	dy = 1 // south
-	  case 3:
-	  	dy = -1 // north
+	case 0:
+		dx = 1 // east
+	case 1:
+		dx = -1 // west
+	case 2:
+		dy = 1 // south
+	case 3:
+		dy = -1 // north
 	}
 
 	return ActionIntent{
@@ -94,7 +127,7 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 //
 //	Group intentions by type
 //	Resovle intentions in desired order
-func resolveActions(intents []ActionIntent, env [][]environment, createCreature func(*Creature) *Creature, tickStats *TickStats) {
+func resolveActions(intents []ActionIntent, env [][]environment, creatureFac func(*Creature) *Creature, tickStats *TickStats) {
 	// Phase 1: Group intents by type
 	var moveIntents, cloneIntents, eatIntents, fightIntents, sleepIntents []ActionIntent
 	fought := make(map[*Creature]bool)
@@ -102,52 +135,57 @@ func resolveActions(intents []ActionIntent, env [][]environment, createCreature 
 	for _, intent := range intents {
 		switch intent.Type {
 		case "fight":
-			tickStats.Fights++
 			fightIntents = append(fightIntents, intent)
 		case "move":
-			tickStats.Moves++
 			moveIntents = append(moveIntents, intent)
 		case "clone":
-			tickStats.Clones++
 			cloneIntents = append(cloneIntents, intent)
 		case "eat":
-			tickStats.Eats++
 			eatIntents = append(eatIntents, intent)
 		case "sleep":
-			tickStats.Sleeps++
 			sleepIntents = append(sleepIntents, intent)
 		}
 	}
 	// Phase 2: Resolve in safe order
-  for _, intent := range fightIntents {
- 	  fought[intent.Creature] = true
- 	  fought[intent.TargetCreature] = true
- 	  resolveFight(intent, tickStats)
-   }
- 
- 	for _, intent := range eatIntents {
- 	  if !fought[intent.Creature] {
- 		  resolveEat(intent, env, tickStats)
- 	  }
-  }
- 
-  for _, intent := range cloneIntents {
- 	  if !fought[intent.Creature] {
- 		  resolveClone(intent, env, createCreature)
- 	  }
-  } 
- 
-  for _, intent := range moveIntents {
-  	if !fought[intent.Creature] {
-  	  resolveMove(intent, env)
-    }
-  }
- 
-  for _, intent := range sleepIntents {
- 	  if !fought[intent.Creature] {
- 	    resolveSleep(intent, tickStats)
- 	  }
-  }
+	for _, intent := range fightIntents {
+		fought[intent.Creature] = true
+		fought[intent.TargetCreature] = true
+		resolveFight(intent, tickStats)
+	}
+	// count fights in this way to account for a creature being involved in multiple fights
+	for _, f := range fought {
+		if f {
+			tickStats.Fights++
+		}
+	}
+
+	for _, intent := range eatIntents {
+		if !fought[intent.Creature] {
+			tickStats.Eats++
+			resolveEat(intent, env, tickStats)
+		}
+	}
+
+	for _, intent := range cloneIntents {
+		if !fought[intent.Creature] {
+			tickStats.Clones++
+			resolveClone(intent, env, creatureFac)
+		}
+	}
+
+	for _, intent := range moveIntents {
+		if !fought[intent.Creature] {
+			tickStats.Moves++
+			resolveMove(intent, env)
+		}
+	}
+
+	for _, intent := range sleepIntents {
+		if !fought[intent.Creature] {
+			tickStats.Sleeps++
+			resolveSleep(intent, tickStats)
+		}
+	}
 }
 
 // Resolve "Fight" action
@@ -155,26 +193,33 @@ func resolveFight(intent ActionIntent, tickStats *TickStats) {
 	c := intent.Creature
 	tc := intent.TargetCreature
 
-	// two attacks each
-	for range 2 {
+	// three attacks each
+	for range 3 {
 		if c.health > 0 {
-			cAttack := int((c.health + c.nutrition) / 5)
+			//TODO: consider reducing attack based on being young or old
+			// 			reduce attack by:	absolute value of age - (maxAge / 2)
+			cAttack := int((c.health + c.nutrition) / 50) // damage advantage to the agressor
 			tc.health -= cAttack
 			tc.nutrition -= 5
 			c.nutrition -= 5
 		} else {
-			tickStats.FightDeaths++
 			break
 		}
 		if tc.health > 0 {
-			tcAttack := int((tc.health + tc.nutrition) / 5)
+			tcAttack := int((tc.health + tc.nutrition) / 60) // damage disadvantage to the defender
 			c.health -= tcAttack
 			c.nutrition -= 5
 			tc.nutrition -= 5
 		} else {
-			tickStats.FightDeaths++
 			break
 		}
+	}
+	
+	if c.health <= 0 {
+		tickStats.FightDeaths++
+	}
+	if tc.health <= 0 {
+		tickStats.FightDeaths++
 	}
 }
 
@@ -184,7 +229,7 @@ func resolveMove(intent ActionIntent, env [][]environment) {
 	oldX, oldY := c.X, c.Y
 	newX, newY := intent.TargetX, intent.TargetY
 
-	c.nutrition -= 5
+	c.nutrition -= max(int(c.maxNutrition/100), 1)
 
 	// Bounds check
 	if newY < 0 || newY >= len(env) || newX < 0 || newX >= len(env[0]) {
@@ -215,13 +260,11 @@ func resolveClone(intent ActionIntent, env [][]environment, createCreature func(
 	clone := createCreature(parent)
 	clone.X = x
 	clone.Y = y
-	clone.health = int(float64(clone.maxHealth) * 0.1)
-	clone.nutrition = int(float64(clone.maxNutrition) * 0.1)
 
 	// Add clone to map
 	env[y][x].creatureList = append(env[y][x].creatureList, clone)
 
-	// Reduce parent's health by 60%
+	// Reduce parent's health by 70%
 	parent.health = int(float64(parent.health) * 0.3)
 }
 
@@ -231,7 +274,7 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 	location := &env[c.Y][c.X]
 
 	toConsume := min(5, location.food)
-	c.nutrition += 10 * toConsume
+	c.nutrition = min(c.nutrition + 15*toConsume, c.maxNutrition)
 
 	tickStats.FoodConsumed += toConsume
 	location.food -= toConsume
@@ -240,9 +283,7 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 // Resolve "Sleep" creature action
 func resolveSleep(intent ActionIntent, tickStats *TickStats) {
 	c := intent.Creature
-	tickStats.Sleeps++
-	c.nutrition -= 2
+	c.nutrition -= max(c.maxNutrition / 200, 0)
 
 	processHealth(c, tickStats)
 }
-

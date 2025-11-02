@@ -14,37 +14,51 @@ func min(a, b int) int {
 	return b
 }
 
-// Helper function to view N locations around a starting location and callback
-func SpiralLook2D_N(env [][]environment, creature *Creature, view func(x, y int)) {
-	width := len(env)
-	height := len(env[0])
+// Helper function to return max of two integers
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
 
+// Helper function to view N locations around a starting location and callback
+func SpiralLook2D_N(env [][]environment, c *Creature) {
+	height := len(env)
+	width := len(env[0])
+
+	c.observed = c.observed[:0] // Clear previous observations while reusing slice memory
+
+	// Direction vectors: right, down, left, up
 	dx := []int{1, 0, -1, 0}
 	dy := []int{0, 1, 0, -1}
 
-	n := int(creature.vision)
-	x, y := creature.X, creature.Y // starting location
-	viewed := 0                    // current number of locations viewed
-	stepSize := 1
-	dir := 0
+	// Setup
+	n := int(c.vision) // max number of cells to observe
+	x, y := c.X, c.Y   // start at creature's current position
+	viewed := 0        // counter for observed locations
+	stepSize := 1      // number of steps per leg of the spiral
+	dir := 0           // direction index (0:right, 1:down, 2:left, 3:up)
 
+	// Begin spiral outward until N cells are observed or map bounds are exceeded
 	for radius := 1; viewed < n && radius < max(width, height); radius++ {
-		for range 2 { // two sides per ring
+		for range 2 { // each ring has two legs in a direction
 			for range stepSize {
 				x += dx[dir]
 				y += dy[dir]
-				if x >= 0 && x < width && y >= 0 && y < height {
-					view(x, y)
-					viewed++
 
+				// If within bounds, record the location
+				if x >= 0 && x < width && y >= 0 && y < height {
+					c.observed = append(c.observed, ObservedLocation{Env: &env[y][x], X: x, Y: y})
+					viewed++
 					if viewed == n {
 						return
 					}
 				}
 			}
-			dir = (dir + 1) % 4
+			dir = (dir + 1) % 4 // turn 90 degrees clockwise
 		}
-		stepSize++
+		stepSize++ // increase step size for the next ring of the spiral
 	}
 }
 
@@ -71,12 +85,11 @@ func mapToSortedAncestryStats(am map[*Creature]int, ancestryStats *[]AncestrySta
 }
 
 // Helper function to create a color to be used by a creature
-func generateColor(index, total int) string {
-	if total <= 0 {
-		total = 1
-	}
-	hue := float64(index%total) / float64(total)
-	r, g, b := hsvToRGB(hue, 1.0, 1.0)
+func generateColor(index, _ int) string {
+	// Golden-ratio hue offset for better distinction
+	hue := math.Mod(0.61803398875*float64(index), 1.0)
+
+	r, g, b := hsvToRGB(hue, 0.85, 0.95)
 	return fmt.Sprintf("\033[38;2;%d;%d;%dm", r, g, b)
 }
 
@@ -89,20 +102,20 @@ func hsvToRGB(h, s, v float64) (int, int, int) {
 
 	var r, g, b float64
 	switch {
-	case 0 <= h && h < 1:
-		r, g, b = c, x, 0
-	case 1 <= h && h < 2:
-		r, g, b = x, c, 0
-	case 2 <= h && h < 3:
-		r, g, b = 0, c, x
-	case 3 <= h && h < 4:
-		r, g, b = 0, x, c
-	case 4 <= h && h < 5:
-		r, g, b = x, 0, c
-	case 5 <= h && h < 6:
-		r, g, b = c, 0, x
-	default:
-		r, g, b = 0, 0, 0
+	  case 0 <= h && h < 1:
+	  	r, g, b = c, x, 0
+	  case 1 <= h && h < 2:
+	  	r, g, b = x, c, 0
+	  case 2 <= h && h < 3:
+	  	r, g, b = 0, c, x
+	  case 3 <= h && h < 4:
+	  	r, g, b = 0, x, c
+	  case 4 <= h && h < 5:
+	  	r, g, b = x, 0, c
+	  case 5 <= h && h < 6:
+	  	r, g, b = c, 0, x
+	  default:
+	  	r, g, b = 0, 0, 0
 	}
 
 	return int((r + m) * 255), int((g + m) * 255), int((b + m) * 255)
@@ -151,4 +164,30 @@ func flattenCreatureList(env [][]environment) []*Creature {
 		}
 	}
 	return all
+}
+
+// Helper function to sort a list of environments by food
+func SortEnvironmentListByFood(ol []ObservedLocation) {
+	sort.Slice(ol, func(i, j int) bool {
+		return ol[i].Env.food > ol[j].Env.food
+	})
+}
+
+// Helper function to sort a list of environments by occupants desc
+func SortEnvironmentListByOccupantsDesc(ol []ObservedLocation) {
+	sort.Slice(ol, func(i, j int) bool {
+		return len(ol[i].Env.creatureList) < len(ol[j].Env.creatureList)
+	})
+}
+
+// Helper function to clamp a value at 1, 0, or -1
+func sign(n int) int {
+	switch {
+	case n > 0:
+		return 1
+	case n < 0:
+		return -1
+	default:
+		return 0
+	}
 }
