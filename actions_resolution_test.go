@@ -394,12 +394,7 @@ func TestDecideAction_FightNotTriggeredDeterministic(t *testing.T) {
 // Test aggression reduction when two creatures share same ancestor.
 func TestDecideAction_FightAggressionReductionSharedAncestor(t *testing.T) {
 	ResetRand(1)
-	ancestor := &Creature{num: 999}
-	parentA := &Creature{ancestor: ancestor}
-	parentB := &Creature{ancestor: ancestor}
-	// Aggression high enough that without reduction Intn(100)=81 would trigger (90>81).
-	c1 := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 0, maxAge: 100, nutrition: 50, maxNutrition: 100, aggression: 90, vision: 0, parent: parentA, ancestor: ancestor}
-	c2 := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 0, maxAge: 100, nutrition: 50, maxNutrition: 100, aggression: 10, vision: 0, parent: parentB, ancestor: ancestor}
+	c1, c2 := RelatedCreatures(90, 10)
 	env := make([][]environment, 3)
 	for i := range env {
 		env[i] = make([]environment, 3)

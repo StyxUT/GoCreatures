@@ -1,5 +1,22 @@
 package main
 
+// RelatedCreatures returns two creatures sharing the same ancestor but different parents.
+// Aggression values can be provided; if zero use defaults.
+func RelatedCreatures(aggressionA, aggressionB int) (c1, c2 *Creature) {
+	ancestor := &Creature{num: 1000}
+	parentA := &Creature{ancestor: ancestor}
+	parentB := &Creature{ancestor: ancestor}
+	if aggressionA == 0 {
+		aggressionA = 50
+	}
+	if aggressionB == 0 {
+		aggressionB = 10
+	}
+	c1 = &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 0, maxAge: 100, nutrition: 50, maxNutrition: 100, aggression: aggressionA, vision: 0, parent: parentA, ancestor: ancestor}
+	c2 = &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 0, maxAge: 100, nutrition: 50, maxNutrition: 100, aggression: aggressionB, vision: 0, parent: parentB, ancestor: ancestor}
+	return
+}
+
 func DeadCreature() *Creature {
 	return &Creature{
 		num:       1,
