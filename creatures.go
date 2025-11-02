@@ -9,7 +9,7 @@ type Creature struct {
 	num          int
 	parent       *Creature
 	ancestor     *Creature
-	generation		int
+	generation   int
 	char         rune
 	colorCode    string
 	health       int
@@ -21,14 +21,8 @@ type Creature struct {
 	nutrition    int
 	maxNutrition int
 	aggression   int
-	vision  		float64
-	observed []*environment
-}
-
-type environment struct {
-	creatureList []*Creature
-	food         int
-	maxFood      int
+	vision       float64
+	observed     []ObservedLocation
 }
 
 type ActionIntent struct {
@@ -42,6 +36,12 @@ type ActionIntent struct {
 type AncestryStats struct {
 	Ancestor     *Creature
 	LineageCount int
+}
+
+type ObservedLocation struct {
+	Env *environment
+	X   int
+	Y   int
 }
 
 // Generate a creature and set it's characteristics
@@ -66,20 +66,23 @@ func CreatureFactory() func(parent *Creature) *Creature {
 			generation = 1
 			maxAge = rand.Intn(200)
 			maxHealth = rand.Intn(200) + 300
-			health = int(rand.Intn(maxHealth / 5))
+			health = int(rand.Intn(maxHealth / 2))
 			metabolism = rand.Intn(25) + 1
 			maxNutrition = rand.Intn(500) + 200
-			nutrition = int(rand.Intn(maxNutrition / 4))
+			nutrition = int(rand.Intn(maxNutrition / 2))
 			aggression = rand.Intn(100)
-			vision = rand.Float64()*8
+			vision = 1 + (rand.Float64() * 20)
 		} else {
+		  // Set clone values based on parent	
 			color = parent.ancestor.colorCode
 			generation = parent.generation + 1
-			maxAge = int(float64(parent.maxAge) * (1 + (rand.Float64()*0.02 - 0.01)))             // set maxAge to parent's max age + or - 1%
-			maxHealth = int(float64(parent.maxHealth) * (1 + (rand.Float64()*0.02 - 0.01)))       // set maxHealth to parent's max health + or - 1%
-			metabolism = int(float64(parent.metabolism) * (1 + (rand.Float64()*0.02 - 0.01)))     // set metabolism to parent's metabolism + or - 1%
-			maxNutrition = int(float64(parent.maxNutrition) * (1 + (rand.Float64()*0.02 - 0.01))) // set maxNutrition to parent's maxNutrition + or - 1%
-			aggression = parent.aggression + (rand.Intn(3) - 1)                                   // add or remove 1
+			maxAge = int(float64(parent.maxAge) * (1 + (rand.Float64()*0.02 - 0.01)))
+			maxHealth = int(float64(parent.maxHealth) * (1 + (rand.Float64()*0.02 - 0.01)))
+			health = int(float64(maxHealth + parent.health) / 2 * 0.3)
+			metabolism = int(float64(parent.metabolism) * (1 + (rand.Float64()*0.02 - 0.01)))
+			maxNutrition = int(float64(parent.maxNutrition) * (1 + (rand.Float64()*0.02 - 0.01)))
+			nutrition = int(float64(maxNutrition + parent.nutrition) / 2 * 0.3)
+			aggression = parent.aggression + (rand.Intn(3) - 1)                                 
 			vision = parent.vision + (rand.Float64()*0.2 - 0.1)
 		}
 
@@ -88,7 +91,7 @@ func CreatureFactory() func(parent *Creature) *Creature {
 			colorCode:    color,
 			char:         NextSafeRune(),
 			parent:       parent,
-			generation: generation,
+			generation:   generation,
 			health:       health,
 			maxHealth:    maxHealth,
 			X:            0,
@@ -99,7 +102,7 @@ func CreatureFactory() func(parent *Creature) *Creature {
 			nutrition:    nutrition,
 			maxNutrition: maxNutrition,
 			aggression:   aggression,
-			vision: vision,
+			vision:       vision,
 		}
 
 		// set root creature's parent and ancestor to be self
@@ -138,74 +141,41 @@ func collectIntents(creatures []*Creature, env [][]environment) []ActionIntent {
 	return intents
 }
 
-// Process environmental updates including removal of dead creatures
-func processEnvironment(env [][]environment, tickStats *TickStats) {
-	totalCreatures := 0
-	totalDeaths := 0
-	ageDeaths := 0
-	starvationDeaths := 0
-
-	for i := range env {
-		for j := range env[i] {
-			cell := &env[i][j]
-			// Grow food
-			if cell.food < cell.maxFood && rand.Intn(40) == 0 {
-				tickStats.FoodAdded++
-				cell.food++
-			}
-
-			// Manage dead creatures
-			newList := cell.creatureList[:0] // reuse underlying array
-			for _, c := range cell.creatureList {
-				switch {
-				case c.age >= c.maxAge:
-					ageDeaths++
-					totalDeaths++
-				case c.health <= 0:
-					starvationDeaths++
-					totalDeaths++
-				default:
-					newList = append(newList, c)
-					totalCreatures++
-				}
-
-				cell.creatureList = newList
-			}
-		}
-	}
-	tickStats.TotalCreatures = totalCreatures
-	tickStats.TotalDeaths = totalDeaths
-	tickStats.AgeDeaths = ageDeaths
-	tickStats.StarvationDeaths = starvationDeaths
-}
-
 // Process creature health
 func processHealth(c *Creature, tickStats *TickStats) {
-	tickStats.TotalHealth += c.health
-	if c.health >= c.maxHealth {
+	pctNutrition := (float64(c.nutrition) / float64(c.maxNutrition)) * 100
+	startingHealth := c.health
+	if c.health <= 0 {
 		return
 	}
 
-	pctNutrition := (float64(c.nutrition) / float64(c.maxNutrition)) * 100
 	switch {
-	case pctNutrition <= 25:
-		tickStats.HealthAdded--
-		c.health--
-	case pctNutrition > 50 && pctNutrition < 75:
-		tickStats.HealthAdded += c.metabolism
-		c.health = c.health + c.metabolism
-	case pctNutrition >= 75:
-		tickStats.HealthAdded += (c.metabolism * 2)
-		c.health = c.health + (c.metabolism * 2)
+	  case pctNutrition <= 10: // lose 10% of max health
+	  	c.health -= int(float64(c.maxHealth) * 0.1)	
+	  case pctNutrition <= 30: // lose 5% of max health
+	  	c.health -= int(float64(c.maxHealth) * 0.05)	
+	  case pctNutrition <= 50:  // 2% of max health
+	  	c.health -= int(float64(c.maxHealth) * 0.02)	
+	  case pctNutrition <= 70:  // 2% of max health
+	  	tickStats.HealthAdded += c.metabolism
+	  	c.health += c.metabolism
+	  default:
+	  	tickStats.HealthAdded += (c.metabolism * 2)
+	  	c.health += (c.metabolism * 2)
+	}
+	
+  if c.health <= 0 && startingHealth > 0 {
+		tickStats.StarvationDeaths++
 	}
 
 	// Ensure health doesn't exceed maxHealth
 	c.health = min(c.maxHealth, c.health)
+
+	tickStats.TotalHealth += c.health
 }
 
 // Process creature nutrition
 func processNutrition(c *Creature, tickStats *TickStats) {
-	c.nutrition -= c.metabolism
+	c.nutrition -= int(c.metabolism / 2)
 	tickStats.TotalNutrition += c.nutrition
 }
-

@@ -1,6 +1,8 @@
 package main
 
-import ( "testing")
+import (
+	"testing"
+)
 
 func TestSpiralLook2D_N_LowVisionCreature(t *testing.T) {
 	// Arrange
@@ -11,12 +13,10 @@ func TestSpiralLook2D_N_LowVisionCreature(t *testing.T) {
 
 	cLowVision := LowVisionCreature()
 	cLowVision.X, cLowVision.Y = 2, 2 // center
-	cLowVision.observed = make([]*environment, 0)
+	cLowVision.observed = make([]ObservedLocation, 0)
 
 	// Act
-	SpiralLook2D_N(env, cLowVision, func(x, y int) {
-		cLowVision.observed = append(cLowVision.observed, &env[y][x])
-	})
+	SpiralLook2D_N(env, cLowVision)
 
 	// Assert
 	expected := int(cLowVision.vision)
@@ -26,13 +26,13 @@ func TestSpiralLook2D_N_LowVisionCreature(t *testing.T) {
 
 	seen := map[*environment]bool{}
 	for i, loc := range cLowVision.observed {
-		if loc == nil {
+		if loc.Env == nil {
 			t.Errorf("nil pointer observed at index %d", i)
 		}
-		if seen[loc] {
+		if seen[loc.Env] {
 			t.Errorf("duplicate environment pointer observed at index %d", i)
 		}
-		seen[loc] = true
+		seen[loc.Env] = true
 	}
 }
 
@@ -44,13 +44,11 @@ func TestSpiralLook2D_N_HighVisionCreature(t *testing.T) {
 	}
 
 	cHighVision := HighVisionCreature()
-	cHighVision.X, cHighVision.Y =0, 0 // off center 
-	cHighVision.observed = make([]*environment, 0)
+	cHighVision.X, cHighVision.Y = 0, 0 // off center
+	cHighVision.observed = make([]ObservedLocation, 0)
 
 	// Act
-	SpiralLook2D_N(env, cHighVision, func(x, y int) {
-		cHighVision.observed = append(cHighVision.observed, &env[y][x])
-	})
+	SpiralLook2D_N(env, cHighVision)
 
 	// Assert
 	expected := 8 // 8 not 20 due to vision exceeing bounds
@@ -61,12 +59,12 @@ func TestSpiralLook2D_N_HighVisionCreature(t *testing.T) {
 	// Optional: ensure all references are non-nil and distinct
 	seen := map[*environment]bool{}
 	for i, loc := range cHighVision.observed {
-		if loc == nil {
+		if loc.Env == nil {
 			t.Errorf("nil pointer observed at index %d", i)
 		}
-		if seen[loc] {
+		if seen[loc.Env] {
 			t.Errorf("duplicate environment pointer observed at index %d", i)
 		}
-		seen[loc] = true
+		seen[loc.Env] = true
 	}
 }
