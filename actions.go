@@ -34,7 +34,7 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 		}
 
 		// Fight if aggressive enough
-		if targetCreature != nil && modAggression < rand.Intn(100) {
+		if targetCreature != nil && modAggression > rand.Intn(100) {
 			return ActionIntent{
 				Creature:       c,
 				Type:           "fight",
@@ -151,6 +151,10 @@ func resolveActions(intents []ActionIntent, env [][]environment, creatureFac fun
 		fought[intent.TargetCreature] = true
 		resolveFight(intent, tickStats)
 	}
+	// Fights metric counts distinct participant creatures, not fight pair events.
+	// A single fight between A and B increments twice (once per participant) so tests expect 2.
+	// This allows multiple fight intents involving same creature in one tick to still only count it once.
+	// If event-level counting is desired later, track unique (attacker,target) pairs instead.
 	// count fights in this way to account for a creature being involved in multiple fights
 	for _, f := range fought {
 		if f {
@@ -222,13 +226,20 @@ func resolveFight(intent ActionIntent, tickStats *TickStats) {
 	}
 }
 
+// Apply a nutrition cost scaled by metabolism.
+// Base is multiplied by max(1, metabolism/10) for gentle scaling.
+func applyNutritionCost(c *Creature, base int) {
+	factor := max(int(c.metabolism/10), 1)
+	c.nutrition -= max(base*factor, 1)
+}
+
 // Resolve "Move" creature action
 func resolveMove(intent ActionIntent, env [][]environment) {
 	c := intent.Creature
 	oldX, oldY := c.X, c.Y
 	newX, newY := intent.TargetX, intent.TargetY
 
-	c.nutrition -= max(int(c.maxNutrition/100), 1)
+	applyNutritionCost(c, 1)
 
 	// Bounds check
 	if newY < 0 || newY >= len(env) || newX < 0 || newX >= len(env[0]) {
@@ -287,7 +298,7 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 // Resolve "Sleep" creature action
 func resolveSleep(intent ActionIntent, tickStats *TickStats) {
 	c := intent.Creature
-	c.nutrition -= max(c.maxNutrition/200, 0)
+	applyNutritionCost(c, 1)
 
 	processHealth(c, tickStats)
 }

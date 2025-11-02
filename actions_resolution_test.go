@@ -79,10 +79,10 @@ func TestResolveClone(t *testing.T) {
 
 	clone := creatures[1]
 	if clone.health != 30 {
-		t.Errorf("expected clone health to be 29, but got %d", clone.health)
+		t.Errorf("expected clone health to be 30, but got %d", clone.health)
 	}
 	if clone.nutrition != 30 {
-		t.Errorf("expected clone nutrition to be 29, but got %d", clone.nutrition)
+		t.Errorf("expected clone nutrition to be 30, but got %d", clone.nutrition)
 	}
 
 	if parent.health != 30 {
@@ -186,12 +186,12 @@ func TestCreatureMovesTowardEmptyLocation(t *testing.T) {
 
 	// Decide what action to take
 	intent := c.decideAction(env)
-	// Expected move: (1,1) → (2,1), so dx=+1, dy=0
+	// Expected move: (1,1) → (2,2), so dx=+1, dy=+1
 	if intent.Type != "move" {
 		t.Errorf("Expected move action, got %s", intent.Type)
 	}
 	if intent.TargetX != 2 || intent.TargetY != 2 {
-		t.Errorf("Expected target (2,1), got (%d,%d)", intent.TargetX, intent.TargetY)
+		t.Errorf("Expected target (2,2), got (%d,%d)", intent.TargetX, intent.TargetY)
 	}
 }
 
