@@ -55,9 +55,18 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 	// 		TODO: reduce location preference if others are in the area
 	SortEnvironmentListByFood(c.observed)
 	if len(c.observed) > 0 && pctNutrition > 30 && pctNutrition < 70 && location.food < 30 && location.food < c.observed[0].Env.food {
-		target := c.observed[0]
-		dx := sign(target.X - c.X)
-		dy := sign(target.Y - c.Y)
+		bestFood := c.observed[0].Env.food
+		var bests []ObservedLocation
+		for _, ol := range c.observed {
+			if ol.Env.food == bestFood {
+				bests = append(bests, ol)
+			} else {
+				break
+			}
+		}
+		chosen := chooseByModulo(bests, c.num)
+		dx := sign(chosen.X - c.X)
+		dy := sign(chosen.Y - c.Y)
 
 		return ActionIntent{
 			Creature: c,
@@ -78,9 +87,18 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 	// If crowded move toward an empty location
 	if len(c.observed) > 0 && len(location.creatureList) > 2 {
 		SortEnvironmentListByOccupantsAsc(c.observed)
-		target := c.observed[0]
-		dx := sign(target.X - c.X)
-		dy := sign(target.Y - c.Y)
+		leastCount := len(c.observed[0].Env.creatureList)
+		var leasts []ObservedLocation
+		for _, ol := range c.observed {
+			if len(ol.Env.creatureList) == leastCount {
+				leasts = append(leasts, ol)
+			} else {
+				break
+			}
+		}
+		chosen := chooseByModulo(leasts, c.num)
+		dx := sign(chosen.X - c.X)
+		dy := sign(chosen.Y - c.Y)
 
 		return ActionIntent{
 			Creature: c,

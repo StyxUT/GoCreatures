@@ -1,5 +1,7 @@
 package main
 
+// Helper creature constructors used across tests (non-random deterministic fixtures)
+
 // RelatedCreatures returns two creatures sharing the same ancestor but different parents.
 // Aggression values can be provided; if zero use defaults.
 func RelatedCreatures(aggressionA, aggressionB int) (c1, c2 *Creature) {

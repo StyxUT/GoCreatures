@@ -192,3 +192,16 @@ func sign(n int) int {
 		return 0
 	}
 }
+
+// chooseByModulo spreads selection among tied observed locations deterministically.
+// It expects a slice of ObservedLocation holding only tied candidates.
+func chooseByModulo(tied []ObservedLocation, creatureNum int) ObservedLocation {
+	if len(tied) == 0 {
+		return ObservedLocation{}
+	}
+	if len(tied) == 1 {
+		return tied[0]
+	}
+	idx := creatureNum % len(tied)
+	return tied[idx]
+}

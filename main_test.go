@@ -15,7 +15,7 @@ func TestProcessEnvironment_RemoveDeadCreatures(t *testing.T) {
 	c1 := DeadCreature()
 	c2 := DeadCreature()
 	c3 := DeadCreature()
-  c4 := HealthyCreature()
+	c4 := HealthyCreature()
 	c5 := DeadCreature()
 
 	env[1][1].creatureList = append(env[1][1].creatureList, c1)
@@ -33,9 +33,9 @@ func TestProcessEnvironment_RemoveDeadCreatures(t *testing.T) {
 
 	// Assert
 	if cellCount != 1 {
-		t.Errorf("expected 1 living creature, but got %d", cellCount) 
+		t.Errorf("expected 1 living creature, but got %d", cellCount)
 	}
 	if listCount != 1 {
-		t.Errorf("expected 1 living creature in the flattened creature list, but got %d", listCount) 
+		t.Errorf("expected 1 living creature in the flattened creature list, but got %d", listCount)
 	}
 }

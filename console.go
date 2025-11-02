@@ -10,7 +10,7 @@ import (
 func startKeyListener() {
 	go func() {
 		fd := int(os.Stdin.Fd())
-    oldState, err := term.MakeRaw(fd)
+		oldState, err := term.MakeRaw(fd)
 		if err != nil {
 			panic(err)
 		}
@@ -35,4 +35,3 @@ func startKeyListener() {
 		}
 	}()
 }
-

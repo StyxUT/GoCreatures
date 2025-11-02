@@ -52,7 +52,7 @@ func TestResolveActions_SkipEatAfterFight(t *testing.T) {
 	}
 }
 
-// Test creature cloning
+// Test creature cloning (may disperse)
 func TestResolveClone(t *testing.T) {
 	// Arrange
 	parent := HealthyCreature()
@@ -66,30 +66,39 @@ func TestResolveClone(t *testing.T) {
 
 	env[parent.Y][parent.X].creatureList = append(env[parent.Y][parent.X].creatureList, parent)
 
-	intent := ActionIntent{
-		Creature: parent,
-		Type:     "Clone", // not used as resolveClone() is called directly
-	}
+	intent := ActionIntent{Creature: parent, Type: "clone"}
 
 	// Act
 	resolveClone(intent, env, CreatureFactory())
 
 	// Assert
-	creatures := env[parent.Y][parent.X].creatureList
-	if len(creatures) != 2 {
-		t.Errorf("expected 2 creatures at (%d,%d), but got %d", parent.X, parent.Y, len(creatures))
+	all := flattenCreatureList(env)
+	if len(all) != 2 {
+		t.Fatalf("expected total 2 creatures, got %d", len(all))
 	}
-
-	clone := creatures[1]
+	// Find clone
+	var clone *Creature
+	for _, c := range all {
+		if c != parent {
+			clone = c
+			break
+		}
+	}
+	if clone == nil {
+		t.Fatalf("clone not found")
+	}
 	if clone.health != 30 {
-		t.Errorf("expected clone health to be 30, but got %d", clone.health)
+		t.Errorf("expected clone health 30, got %d", clone.health)
 	}
 	if clone.nutrition != 30 {
-		t.Errorf("expected clone nutrition to be 30, but got %d", clone.nutrition)
+		t.Errorf("expected clone nutrition 30, got %d", clone.nutrition)
 	}
-
 	if parent.health != 30 {
-		t.Errorf("expected parent health to be 30 , but got %d", parent.health)
+		t.Errorf("expected parent health 30, got %d", parent.health)
+	}
+	// Dispersal optional; ensure clone either same cell or adjacent
+	if !(abs(clone.X-parent.X) <= 1 && abs(clone.Y-parent.Y) <= 1) {
+		t.Errorf("expected clone adjacent to parent, got (%d,%d) parent (%d,%d)", clone.X, clone.Y, parent.X, parent.Y)
 	}
 }
 
@@ -154,47 +163,26 @@ func TestResolveEat(t *testing.T) {
 	}
 }
 
-// Test creature moves toward empty location
+// Test creature moves toward empty location (crowded dispersion branch)
 func TestCreatureMovesTowardEmptyLocation(t *testing.T) {
-	// Create 3x3 environment with food in a known spot
+	ResetRand(1)
+	// Create 3x3 environment
 	env := make([][]environment, 3)
 	for i := range env {
 		env[i] = make([]environment, 3)
 	}
-
-	// Seed each location with a creature
-	for i := range env {
-		for j := range env[i] {
-			env[i][j].creatureList = append(env[i][j].creatureList, HealthyCreature())
-		}
-	}
-
-	// Place test creature at (1, 1)
-	c := HighVisionHungryCreature()
-	c.X = 1
-	c.Y = 1
-
-	// Add add two more creatures to 1,1
-	env[1][1].creatureList = append(env[1][1].creatureList, HealthyCreature())
-	env[1][1].creatureList = append(env[1][1].creatureList, HealthyCreature())
-
-	// Empty creatures from 2,2
-	env[2][2].creatureList = nil
-
-	// Scan surroundings
+	// Creature with vision and high nutrition (avoids food-seeking branch)
+	c := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, nutrition: 80, maxNutrition: 100, vision: 5}
+	// Add additional creatures to crowd center
+	env[1][1].creatureList = []*Creature{c, &Creature{}, &Creature{}}
+	// Ensure an obviously empty target cell
 	SpiralLook2D_N(env, c)
-
-	// Sort observed cells
-	SortEnvironmentListByOccupantsAsc(c.observed)
-
-	// Decide what action to take
 	intent := c.decideAction(env)
-	// Expected move: (1,1) → (2,2), so dx=+1, dy=+1
 	if intent.Type != "move" {
-		t.Errorf("Expected move action, got %s", intent.Type)
+		t.Fatalf("Expected move action, got %s", intent.Type)
 	}
-	if intent.TargetX != 2 || intent.TargetY != 2 {
-		t.Errorf("Expected target (2,2), got (%d,%d)", intent.TargetX, intent.TargetY)
+	if intent.TargetX == 1 && intent.TargetY == 1 {
+		t.Fatalf("Expected movement away from crowded cell")
 	}
 }
 
@@ -226,7 +214,7 @@ func TestCreatureMovesTowardFood(t *testing.T) {
 
 	// Decide what action to take
 	intent := c.decideAction(env)
-	// Expected move: (1,1) → (2,1), so dx=+1, dy=0
+	// Expected move: (1,1) -> (2,1), so dx=+1, dy=0
 	if intent.Type != "move" {
 		t.Errorf("Expected move action, got %s", intent.Type)
 	}
@@ -416,23 +404,130 @@ func TestResolveCloneDeterministicMutation(t *testing.T) {
 	for i := range env {
 		env[i] = make([]environment, 3)
 	}
-	env[1][1].creatureList = []*Creature{parent}
+	env[parent.Y][parent.X].creatureList = []*Creature{parent}
 	intent := ActionIntent{Creature: parent, Type: "clone"}
-	// stats not needed for resolveClone; omit to avoid unused variable
 	resolveClone(intent, env, CreatureFactory())
-	if len(env[1][1].creatureList) != 2 {
-		t.Fatalf("expected 2 creatures at clone location, got %d", len(env[1][1].creatureList))
+	all := flattenCreatureList(env)
+	if len(all) != 2 {
+		t.Fatalf("expected total 2 creatures, got %d", len(all))
 	}
-	clone := env[1][1].creatureList[1]
-	// Assert generation increments
+	var clone *Creature
+	for _, c := range all {
+		if c != parent {
+			clone = c
+			break
+		}
+	}
+	if clone == nil {
+		t.Fatalf("clone not found")
+	}
 	if clone.generation != parent.generation+1 {
 		t.Errorf("expected clone generation %d, got %d", parent.generation+1, clone.generation)
 	}
-	// Mutated stats may differ (small +/-1% variation); skip direct equality assertions.
 	if clone.parent != parent {
 		t.Errorf("expected parent pointer set on clone")
 	}
 	if clone.ancestor != parent.ancestor && parent.ancestor != nil {
 		t.Errorf("expected ancestor propagated")
+	}
+	if parent.health >= 60 {
+		t.Errorf("expected parent health reduced below 60, got %d", parent.health)
+	}
+	if !(abs(clone.X-parent.X) <= 1 && abs(clone.Y-parent.Y) <= 1) {
+		t.Errorf("expected clone within 1 cell of parent, got clone (%d,%d) parent (%d,%d)", clone.X, clone.Y, parent.X, parent.Y)
+	}
+}
+
+// abs helper for test-only distance checks
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// New dispersion tests
+// Food tie-break should pick any of the best-food cells and not remain in place.
+func TestDecideAction_FoodDispersionTieBreak(t *testing.T) {
+	ResetRand(1)
+	env := make([][]environment, 3)
+	for i := range env {
+		env[i] = make([]environment, 3)
+	}
+	c := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 10, maxAge: 200, nutrition: 50, maxNutrition: 100, aggression: 0, vision: 6, num: 1}
+	env[1][1].creatureList = []*Creature{c}
+	// Three adjacent best-food cells
+	env[1][2].food = 60
+	env[2][1].food = 60
+	env[0][1].food = 60
+	env[1][1].food = 10
+	intent := c.decideAction(env)
+	if intent.Type != "move" {
+		t.Fatalf("expected move intent, got %s", intent.Type)
+	}
+	if intent.TargetX == 1 && intent.TargetY == 1 {
+		t.Fatalf("expected movement outward toward food")
+	}
+	if env[intent.TargetY][intent.TargetX].food != 60 {
+		t.Fatalf("expected target food 60, got %d", env[intent.TargetY][intent.TargetX].food)
+	}
+}
+
+// Crowded tie-break should move to one of least occupied cells.
+func TestDecideAction_CrowdedDispersionTieBreak(t *testing.T) {
+	ResetRand(1)
+	env := make([][]environment, 3)
+	for i := range env {
+		env[i] = make([]environment, 3)
+	}
+	c := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 10, maxAge: 200, nutrition: 80, maxNutrition: 100, aggression: 0, vision: 6, num: 5}
+	env[1][1].creatureList = []*Creature{c, &Creature{}, &Creature{}}
+	intent := c.decideAction(env)
+	if intent.Type != "move" {
+		t.Fatalf("expected move intent, got %s", intent.Type)
+	}
+	if intent.TargetX == 1 && intent.TargetY == 1 {
+		t.Fatalf("did not move despite crowding")
+	}
+}
+
+// Clone dispersion should place clone in adjacent least-occupied cell when available.
+func TestResolveClone_DispersionAdjacent(t *testing.T) {
+	ResetRand(1)
+	env := make([][]environment, 3)
+	for i := range env {
+		env[i] = make([]environment, 3)
+	}
+	parent := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 10, maxAge: 200, nutrition: 80, maxNutrition: 100, aggression: 0, vision: 1, num: 10}
+	// Ensure ancestor present to avoid nil deref in CreatureFactory clone branch
+	parent.ancestor = &Creature{colorCode: "aaa"}
+	env[1][1].creatureList = []*Creature{parent}
+	intent := ActionIntent{Creature: parent, Type: "clone"}
+	resolveClone(intent, env, CreatureFactory())
+	all := flattenCreatureList(env)
+	if len(all) != 2 {
+		t.Fatalf("expected total 2 creatures, got %d", len(all))
+	}
+	centerCount := len(env[1][1].creatureList)
+	if centerCount == 2 { // fallback same cell
+		if parent.health >= 100 {
+			t.Fatalf("expected parent health reduction, got %d", parent.health)
+		}
+	} else if centerCount == 1 {
+		var clone *Creature
+		for _, c2 := range all {
+			if c2 != parent {
+				clone = c2
+				break
+			}
+		}
+		if clone == nil {
+			t.Fatalf("clone not found")
+		}
+		if clone.X == parent.X && clone.Y == parent.Y {
+			t.Fatalf("clone did not disperse")
+		}
+	} else {
+		t.Fatalf("unexpected center occupant count %d", centerCount)
 	}
 }
