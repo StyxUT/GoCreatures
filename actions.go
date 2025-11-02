@@ -1,7 +1,6 @@
 package main
 
 import (
-	"math/rand"
 	"slices"
 )
 
@@ -34,7 +33,7 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 		}
 
 		// Fight if aggressive enough
-		if targetCreature != nil && modAggression > rand.Intn(100) {
+		if targetCreature != nil && modAggression > RandIntn(100) {
 			return ActionIntent{
 				Creature:       c,
 				Type:           "fight",
@@ -103,7 +102,7 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 
 	// If no other action, wonder in random direction: N, S, E, W
 	dx, dy := 0, 0
-	switch rand.Intn(4) {
+	switch RandIntn(4) {
 	case 0:
 		dx = 1 // east
 	case 1:

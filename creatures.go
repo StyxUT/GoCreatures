@@ -1,7 +1,6 @@
 package main
 
 import (
-	"math/rand"
 	"sync"
 )
 
@@ -64,26 +63,26 @@ func CreatureFactory() func(parent *Creature) *Creature {
 			// Set base values for ancestor creatures
 			color = generateColor(n, 100)
 			generation = 1
-			maxAge = rand.Intn(200)
-			maxHealth = rand.Intn(200) + 300
-			health = int(rand.Intn(maxHealth / 2))
-			metabolism = rand.Intn(25) + 1
-			maxNutrition = rand.Intn(500) + 200
-			nutrition = int(rand.Intn(maxNutrition / 2))
-			aggression = rand.Intn(100)
-			vision = 1 + (rand.Float64() * 20)
+			maxAge = RandIntn(200)
+			maxHealth = RandIntn(200) + 300
+			health = int(RandIntn(maxHealth / 2))
+			metabolism = RandIntn(25) + 1
+			maxNutrition = RandIntn(500) + 200
+			nutrition = int(RandIntn(maxNutrition / 2))
+			aggression = RandIntn(100)
+			vision = 1 + (RandFloat64() * 20)
 		} else {
-		  // Set clone values based on parent	
+			// Set clone values based on parent
 			color = parent.ancestor.colorCode
 			generation = parent.generation + 1
-			maxAge = int(float64(parent.maxAge) * (1 + (rand.Float64()*0.02 - 0.01)))
-			maxHealth = int(float64(parent.maxHealth) * (1 + (rand.Float64()*0.02 - 0.01)))
-			health = int(float64(maxHealth + parent.health) / 2 * 0.3)
-			metabolism = int(float64(parent.metabolism) * (1 + (rand.Float64()*0.02 - 0.01)))
-			maxNutrition = int(float64(parent.maxNutrition) * (1 + (rand.Float64()*0.02 - 0.01)))
-			nutrition = int(float64(maxNutrition + parent.nutrition) / 2 * 0.3)
-			aggression = parent.aggression + (rand.Intn(3) - 1)                                 
-			vision = parent.vision + (rand.Float64()*0.2 - 0.1)
+			maxAge = int(float64(parent.maxAge) * (1 + (RandFloat64()*0.02 - 0.01)))
+			maxHealth = int(float64(parent.maxHealth) * (1 + (RandFloat64()*0.02 - 0.01)))
+			health = int(float64(maxHealth+parent.health) / 2 * 0.3)
+			metabolism = int(float64(parent.metabolism) * (1 + (RandFloat64()*0.02 - 0.01)))
+			maxNutrition = int(float64(parent.maxNutrition) * (1 + (RandFloat64()*0.02 - 0.01)))
+			nutrition = int(float64(maxNutrition+parent.nutrition) / 2 * 0.3)
+			aggression = parent.aggression + (RandIntn(3) - 1)
+			vision = parent.vision + (RandFloat64()*0.2 - 0.1)
 		}
 
 		c := &Creature{
@@ -150,21 +149,21 @@ func processHealth(c *Creature, tickStats *TickStats) {
 	}
 
 	switch {
-	  case pctNutrition <= 10: // lose 10% of max health
-	  	c.health -= int(float64(c.maxHealth) * 0.1)	
-	  case pctNutrition <= 30: // lose 5% of max health
-	  	c.health -= int(float64(c.maxHealth) * 0.05)	
-	  case pctNutrition <= 50:  // 2% of max health
-	  	c.health -= int(float64(c.maxHealth) * 0.02)	
-	  case pctNutrition <= 70:  // 2% of max health
-	  	tickStats.HealthAdded += c.metabolism
-	  	c.health += c.metabolism
-	  default:
-	  	tickStats.HealthAdded += (c.metabolism * 2)
-	  	c.health += (c.metabolism * 2)
+	case pctNutrition <= 10: // lose 10% of max health
+		c.health -= int(float64(c.maxHealth) * 0.1)
+	case pctNutrition <= 30: // lose 5% of max health
+		c.health -= int(float64(c.maxHealth) * 0.05)
+	case pctNutrition <= 50: // 2% of max health
+		c.health -= int(float64(c.maxHealth) * 0.02)
+	case pctNutrition <= 70: // 2% of max health
+		tickStats.HealthAdded += c.metabolism
+		c.health += c.metabolism
+	default:
+		tickStats.HealthAdded += (c.metabolism * 2)
+		c.health += (c.metabolism * 2)
 	}
-	
-  if c.health <= 0 && startingHealth > 0 {
+
+	if c.health <= 0 && startingHealth > 0 {
 		tickStats.StarvationDeaths++
 	}
 

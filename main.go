@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"math/rand"
 	"sync/atomic"
 	"time"
 )
@@ -121,12 +120,12 @@ func initializeMap(rows int, cols int, createCreature func(p *Creature) *Creatur
 		matrix[i] = make([]environment, cols)
 		for j := range matrix[i] {
 			// Set location max and current food
-			maxFood := rand.Intn(120)
-			matrix[i][j].maxFood = maxFood                                            // set max food
-			matrix[i][j].food = int(float64(maxFood) * (float64(rand.Intn(10)) / 20)) // set current food a perentage of maxFood
+			maxFood := RandIntn(120)
+			matrix[i][j].maxFood = maxFood                                           // set max food
+			matrix[i][j].food = int(float64(maxFood) * (float64(RandIntn(10)) / 20)) // set current food a perentage of maxFood
 
 			// Populate with creatures
-			if rand.Intn(100) != 0 { // populate a subset of the map locations
+			if RandIntn(100) != 0 { // populate a subset of the map locations
 				continue
 			}
 
@@ -146,7 +145,7 @@ func simulateTick(env [][]environment, creatureFac func(*Creature) *Creature, ti
 	processEnvironment(env, tickStats)
 
 	creatures := flattenCreatureList(env)
-	
+
 	// Creature simulation updates
 	for _, c := range creatures {
 		c.age++ // age creatures
@@ -206,7 +205,7 @@ func processEnvironment(env [][]environment, tickStats *TickStats) {
 		for j := range env[i] {
 			cell := &env[i][j]
 			// Grow food
-			if cell.food < cell.maxFood && rand.Intn(40) == 0 {
+			if cell.food < cell.maxFood && RandIntn(40) == 0 {
 				tickStats.FoodAdded++
 				cell.food++
 			}
