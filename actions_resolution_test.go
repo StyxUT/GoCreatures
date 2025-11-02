@@ -67,7 +67,7 @@ func TestResolveClone(t *testing.T) {
 		Creature: parent,
 		Type:     "Clone", // not used as resolveClone() is called directly
 	}
-		
+
 	// Act
 	resolveClone(intent, env, CreatureFactory())
 
@@ -82,7 +82,7 @@ func TestResolveClone(t *testing.T) {
 		t.Errorf("expected clone health to be 29, but got %d", clone.health)
 	}
 	if clone.nutrition != 30 {
-		t.Errorf("expected clone nutrition to be 29, but got %d", clone.nutrition) 
+		t.Errorf("expected clone nutrition to be 29, but got %d", clone.nutrition)
 	}
 
 	if parent.health != 30 {
@@ -182,7 +182,7 @@ func TestCreatureMovesTowardEmptyLocation(t *testing.T) {
 	SpiralLook2D_N(env, c)
 
 	// Sort observed cells
-	SortEnvironmentListByOccupantsDesc(c.observed)
+	SortEnvironmentListByOccupantsAsc(c.observed)
 
 	// Decide what action to take
 	intent := c.decideAction(env)
@@ -205,8 +205,8 @@ func TestCreatureMovesTowardFood(t *testing.T) {
 
 	// Set food at (2, 1) to be the highest
 	// env[y][x]
-	env[1][2].food = 50 
-	env[2][2].food = 40 
+	env[1][2].food = 50
+	env[2][2].food = 40
 	env[1][1].food = 29
 	env[0][0].food = 0
 
@@ -232,9 +232,8 @@ func TestCreatureMovesTowardFood(t *testing.T) {
 	}
 }
 
-
 func TestProcessHealth(t *testing.T) {
-	// Arrange	
+	// Arrange
 	env := make([][]environment, 3)
 	for i := range env {
 		env[i] = make([]environment, 3)
@@ -248,7 +247,7 @@ func TestProcessHealth(t *testing.T) {
 	processHealth(c2, &tickStats)
 
 	// Assert
-	if c.health != 44{
+	if c.health != 44 {
 		t.Errorf("Expected creature healh of 44, got %d", c.health)
 	}
 	if c2.health != 90 {
@@ -271,38 +270,38 @@ func TestResolveActionIntentCounts(t *testing.T) {
 
 	intents = append(intents, ActionIntent{
 		Creature: HealthyCreature(),
-		Type: "move",
-		TargetX: 1,
-		TargetY: 2,
-		},
+		Type:     "move",
+		TargetX:  1,
+		TargetY:  2,
+	},
 	)
 	intents = append(intents, ActionIntent{
 		Creature: AggressiveCreature(),
-		Type: "move",
-		TargetX: 1,
-		TargetY: 2,
-		},
+		Type:     "move",
+		TargetX:  1,
+		TargetY:  2,
+	},
 	)
 	intents = append(intents, ActionIntent{
 		Creature: FedCreature(),
-		Type: "sleep",
-		},
+		Type:     "sleep",
+	},
 	)
 	intents = append(intents, ActionIntent{
 		Creature: StarvingCreature(),
-		Type: "eat",
-		},
+		Type:     "eat",
+	},
 	)
 	intents = append(intents, ActionIntent{
-		Creature: LowVisionCreature(),
+		Creature:       LowVisionCreature(),
 		TargetCreature: HighVisionHungryCreature(),
-		Type: "fight",
-		},
+		Type:           "fight",
+	},
 	)
 	intents = append(intents, ActionIntent{
 		Creature: HighVisionCreature(),
-		Type: "clone",
-		},
+		Type:     "clone",
+	},
 	)
 
 	// Act

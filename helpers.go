@@ -102,20 +102,20 @@ func hsvToRGB(h, s, v float64) (int, int, int) {
 
 	var r, g, b float64
 	switch {
-	  case 0 <= h && h < 1:
-	  	r, g, b = c, x, 0
-	  case 1 <= h && h < 2:
-	  	r, g, b = x, c, 0
-	  case 2 <= h && h < 3:
-	  	r, g, b = 0, c, x
-	  case 3 <= h && h < 4:
-	  	r, g, b = 0, x, c
-	  case 4 <= h && h < 5:
-	  	r, g, b = x, 0, c
-	  case 5 <= h && h < 6:
-	  	r, g, b = c, 0, x
-	  default:
-	  	r, g, b = 0, 0, 0
+	case 0 <= h && h < 1:
+		r, g, b = c, x, 0
+	case 1 <= h && h < 2:
+		r, g, b = x, c, 0
+	case 2 <= h && h < 3:
+		r, g, b = 0, c, x
+	case 3 <= h && h < 4:
+		r, g, b = 0, x, c
+	case 4 <= h && h < 5:
+		r, g, b = x, 0, c
+	case 5 <= h && h < 6:
+		r, g, b = c, 0, x
+	default:
+		r, g, b = 0, 0, 0
 	}
 
 	return int((r + m) * 255), int((g + m) * 255), int((b + m) * 255)
@@ -174,7 +174,8 @@ func SortEnvironmentListByFood(ol []ObservedLocation) {
 }
 
 // Helper function to sort a list of environments by occupants desc
-func SortEnvironmentListByOccupantsDesc(ol []ObservedLocation) {
+// SortEnvironmentListByOccupantsAsc sorts observed locations by ascending occupant count (fewest creatures first).
+func SortEnvironmentListByOccupantsAsc(ol []ObservedLocation) {
 	sort.Slice(ol, func(i, j int) bool {
 		return len(ol[i].Env.creatureList) < len(ol[j].Env.creatureList)
 	})

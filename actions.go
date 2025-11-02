@@ -56,7 +56,7 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 	// 		TODO: reduce location preference if others are in the area
 	SortEnvironmentListByFood(c.observed)
 	if len(c.observed) > 0 && pctNutrition > 30 && pctNutrition < 70 && location.food < 30 && location.food < c.observed[0].Env.food {
-	  target := c.observed[0]
+		target := c.observed[0]
 		dx := sign(target.X - c.X)
 		dy := sign(target.Y - c.Y)
 
@@ -76,10 +76,10 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 		}
 	}
 
-	// If crowded move toward an empty location 
+	// If crowded move toward an empty location
 	if len(c.observed) > 0 && len(location.creatureList) > 2 {
-	  SortEnvironmentListByOccupantsDesc(c.observed)
-	  target := c.observed[0]
+		SortEnvironmentListByOccupantsAsc(c.observed)
+		target := c.observed[0]
 		dx := sign(target.X - c.X)
 		dy := sign(target.Y - c.Y)
 
@@ -90,7 +90,6 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 			TargetY:  c.Y + dy,
 		}
 	}
-
 
 	// If nutrition is high, or health is low and > 20% nutrition, sleep
 	if pctNutrition > 70 || (pctNutrition > 40 && pctHealth < 60) {
@@ -214,7 +213,7 @@ func resolveFight(intent ActionIntent, tickStats *TickStats) {
 			break
 		}
 	}
-	
+
 	if c.health <= 0 {
 		tickStats.FightDeaths++
 	}
@@ -276,7 +275,7 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 	toConsume := min(5, location.food)
 	gain := 15 * toConsume
 	if c.maxNutrition > 0 {
-		c.nutrition = min(c.nutrition + gain, c.maxNutrition)
+		c.nutrition = min(c.nutrition+gain, c.maxNutrition)
 	} else {
 		c.nutrition += gain
 	}
@@ -288,7 +287,7 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 // Resolve "Sleep" creature action
 func resolveSleep(intent ActionIntent, tickStats *TickStats) {
 	c := intent.Creature
-	c.nutrition -= max(c.maxNutrition / 200, 0)
+	c.nutrition -= max(c.maxNutrition/200, 0)
 
 	processHealth(c, tickStats)
 }
