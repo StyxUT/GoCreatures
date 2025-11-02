@@ -274,7 +274,12 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 	location := &env[c.Y][c.X]
 
 	toConsume := min(5, location.food)
-	c.nutrition = min(c.nutrition + 15*toConsume, c.maxNutrition)
+	gain := 15 * toConsume
+	if c.maxNutrition > 0 {
+		c.nutrition = min(c.nutrition + gain, c.maxNutrition)
+	} else {
+		c.nutrition += gain
+	}
 
 	tickStats.FoodConsumed += toConsume
 	location.food -= toConsume
