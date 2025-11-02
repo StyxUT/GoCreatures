@@ -10,7 +10,7 @@ Types: favor built-in `int` unless size matters; keep struct fields contiguous l
 Errors: return `error` values; avoid panic except unrecoverable terminal/raw mode setup.
 Concurrency: only per‑creature decision goroutines; no shared mutation inside them; join before resolution.
 Atomics: use `atomic` only for pause flags; otherwise channel or mutex; avoid data races (run `go test -race`).
-Randomness: seed once in `init`; for deterministic tests consider injecting `*rand.Rand`.
+Randomness: use central RNG wrappers (`RandIntn`, `RandFloat64`); seed once in `init`. For deterministic tests inject with `SetRand(rand.New(rand.NewSource(seed)))` or call `ResetRand(seed)`.
 Mutations: prefer pure helpers; minimize global state (current globals: `safeRunes`, `nextRuneIndex`, `paused`, `exitCh`, `isTest`).
 Collections: reuse slices via reslicing (pattern already in environment filtering & observation).
 Stats: update `TickStats` only inside simulation tick / action resolvers to keep ordering deterministic.
