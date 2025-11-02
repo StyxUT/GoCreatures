@@ -70,7 +70,7 @@ func CreatureFactory() func(parent *Creature) *Creature {
 			maxNutrition = RandIntn(500) + 200
 			nutrition = int(RandIntn(maxNutrition / 2))
 			aggression = RandIntn(100)
-			vision = 1 + (RandFloat64() * 20)
+			vision = 5 + (RandFloat64() * 20)
 		} else {
 			// Set clone values based on parent
 			color = parent.ancestor.colorCode
