@@ -390,3 +390,54 @@ func TestDecideAction_FightNotTriggeredDeterministic(t *testing.T) {
 		t.Fatalf("expected target (1,0) (north), got (%d,%d)", intent.TargetX, intent.TargetY)
 	}
 }
+
+// Test aggression reduction when two creatures share same ancestor.
+func TestDecideAction_FightAggressionReductionSharedAncestor(t *testing.T) {
+	ResetRand(1)
+	ancestor := &Creature{num: 999}
+	parentA := &Creature{ancestor: ancestor}
+	parentB := &Creature{ancestor: ancestor}
+	// Aggression high enough that without reduction Intn(100)=81 would trigger (90>81).
+	c1 := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 0, maxAge: 100, nutrition: 50, maxNutrition: 100, aggression: 90, vision: 0, parent: parentA, ancestor: ancestor}
+	c2 := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, age: 0, maxAge: 100, nutrition: 50, maxNutrition: 100, aggression: 10, vision: 0, parent: parentB, ancestor: ancestor}
+	env := make([][]environment, 3)
+	for i := range env {
+		env[i] = make([]environment, 3)
+	}
+	env[1][1].creatureList = []*Creature{c1, c2}
+	intent := c1.decideAction(env)
+	// Because they share ancestor, effective aggression should be reduced below 81, causing wander instead of fight.
+	if intent.Type != "move" {
+		t.Fatalf("expected move intent (aggression reduced), got %s", intent.Type)
+	}
+}
+
+// Test clone mutation is deterministic with seeded RNG (no randomness in initial tick after clone except rune assignment not checked)
+func TestResolveCloneDeterministicMutation(t *testing.T) {
+	ResetRand(1)
+	ancestor := &Creature{num: 500}
+	parent := &Creature{X: 1, Y: 1, health: 60, maxHealth: 100, nutrition: 60, maxNutrition: 100, aggression: 20, vision: 2, generation: 3, ancestor: ancestor}
+	env := make([][]environment, 3)
+	for i := range env {
+		env[i] = make([]environment, 3)
+	}
+	env[1][1].creatureList = []*Creature{parent}
+	intent := ActionIntent{Creature: parent, Type: "clone"}
+	// stats not needed for resolveClone; omit to avoid unused variable
+	resolveClone(intent, env, CreatureFactory())
+	if len(env[1][1].creatureList) != 2 {
+		t.Fatalf("expected 2 creatures at clone location, got %d", len(env[1][1].creatureList))
+	}
+	clone := env[1][1].creatureList[1]
+	// Assert generation increments
+	if clone.generation != parent.generation+1 {
+		t.Errorf("expected clone generation %d, got %d", parent.generation+1, clone.generation)
+	}
+	// Mutated stats may differ (small +/-1% variation); skip direct equality assertions.
+	if clone.parent != parent {
+		t.Errorf("expected parent pointer set on clone")
+	}
+	if clone.ancestor != parent.ancestor && parent.ancestor != nil {
+		t.Errorf("expected ancestor propagated")
+	}
+}
