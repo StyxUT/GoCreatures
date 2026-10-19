@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "gocreatures",
+  "project_id": "cc57adb2-60fc-469f-8c23-b5a34fb2eeaa"
+}
