@@ -142,6 +142,18 @@ func plantBiomassToColor(biomass, capacity float64) string {
 
 // plantTexture assigns a fixed three-column position and species-specific
 // foreground/background cues. It depends only on the cell snapshot, not RNG.
+var plantTextures = [plantSpeciesCount][4]rune{
+	{'.', '|', 'I', 'H'},
+	{'.', '*', 'o', '@'},
+	{':', 'x', 'X', '#'},
+}
+
+var plantBackgrounds = [plantSpeciesCount][4]string{
+	{"\033[48;5;100m", "\033[48;5;64m", "\033[48;5;28m", "\033[48;5;34m"},
+	{"\033[48;5;108m", "\033[48;5;30m", "\033[48;5;24m", "\033[48;5;23m"},
+	{"\033[48;5;97m", "\033[48;5;96m", "\033[48;5;54m", "\033[48;5;53m"},
+}
+
 func plantTexture(species PlantSpecies, biomass, capacity float64) (string, rune) {
 	if biomass <= 0 || capacity <= 0 {
 		return "\033[48;5;94m", '.'
@@ -156,20 +168,10 @@ func plantTexture(species PlantSpecies, biomass, capacity float64) (string, rune
 	case density >= 0.1:
 		shade = 1
 	}
-	backgrounds := [plantSpeciesCount][4]int{
-		{100, 64, 28, 34}, // olive grass
-		{108, 30, 24, 23}, // teal clover
-		{97, 96, 54, 53},  // muted purple bramble
-	}
-	textures := [plantSpeciesCount][4]rune{
-		{'.', '|', 'I', 'H'},
-		{'.', '*', 'o', '@'},
-		{':', 'x', 'X', '#'},
-	}
 	if species >= plantSpeciesCount {
 		return "\033[48;5;94m", '.'
 	}
-	return fmt.Sprintf("\033[48;5;%dm", backgrounds[species][shade]), textures[species][shade]
+	return plantBackgrounds[species][shade], plantTextures[species][shade]
 }
 
 // Helper function to flatten the creature list

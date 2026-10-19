@@ -48,7 +48,9 @@ purple crosshatch. Empty positions use dark soil; positive biomass uses sparse
 (1–9%), medium (10–39%), rich (40–69%) and dense (70–100%) texture/background
 bands. Creature glyphs cover the corresponding foreground texture while its
 species-specific background remains visible. The legend documents this overlay
-limitation. Rendering is deterministic and uses no simulation randomness.
+limitation. Single carnivores use brackets; multiple carnivores and crowded
+herbivores retain a compact count cue within the three-column cell. Rendering is
+deterministic and uses no simulation randomness.
 
 ## Plant ecology
 
@@ -83,3 +85,28 @@ biomass-weighted trait means, plus per-tick establishment/mutation/grazing and
 cumulative growth, transfers, consumption and evolution events. A species with
 no living colonies reports zero biomass, occupancy and trait means. The seeded
 diagnostic is `go test -run '^TestSeededPlantMutationRateIsRareRelativeToCreatureCloning$' -count=1 -v`; it samples 100,000 establishment opportunities and records realized plant mutations against the larger per-clone creature trait perturbations. This is an opportunity-rate comparison, not a wall-clock coexistence guarantee.
+
+## Integration performance evidence
+
+Measured on Go 1.27.2, linux/amd64, AMD Ryzen 9 3950X with
+`go test -run '^$' -bench '^BenchmarkDefaultWorld(TickAndRender|Tick|Render|PlantMaintenance)$' -benchtime=100x -count=5 -benchmem`.
+The comparison revision is pre-vegetation `b497f8b`; its benchmark adapter
+changes only the historical `CreatureFactory` and `simulateTick` signatures.
+Reported values are medians of five runs:
+
+| Scenario | Pre-vegetation | Integrated plants | Change |
+| --- | ---: | ---: | ---: |
+| 38x81 tick + map render | 285 µs, 224 KB | 565 µs, 461 KB | 1.99x time |
+| 38x81 tick only | 94 µs, 7.7 KB | 311 µs, 83.6 KB | 3.30x time |
+| 38x81 map render only | 159 µs, 193 KB | 184 µs, 378 KB | 1.16x time |
+| 38x81 plant maintenance, no creatures | 59 µs, 128 B | 135 µs, 48 B | +76 µs |
+
+Profiling identified a full per-tick grid copy for plant snapshots and oversized
+render-buffer allocation. Spread intents are now collected before any plant
+mutation (preserving snapshot semantics without copying the grid), and render
+output is pre-sized with cached species styles. This reduced the combined
+integrated benchmark from about 956 µs / 1.38 MB per operation to the recorded
+565 µs / 461 KB. The remaining absolute tick+render cost is under 0.6 ms versus
+the normal 300 ms tick interval; the ecology parameters were retained because
+the seeded checks showed the requested bounded, rare mutation rate and no
+resource invariant failures.

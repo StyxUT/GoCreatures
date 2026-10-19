@@ -1,10 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -410,7 +410,7 @@ func seedPlants(env [][]environment) {
 }
 
 func simulateTick(env [][]environment, creatureFac func(*Creature) *Creature, tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals) {
-	// Each result describes this tick; cumulative carnivore totals are separate.
+	// Per-tick values reset; plant cumulative totals survive across calls.
 	cumulativePlants := tickStats.PlantCumulative
 	*tickStats = TickStats{Tick: tickStats.Tick, PlantCumulative: cumulativePlants}
 	processEnvironment(env, tickStats, carnivoreTotals)
@@ -490,7 +490,12 @@ func printMap(env [][]environment) {
 }
 
 func renderMap(env [][]environment) string {
-	var buf bytes.Buffer
+	var buf strings.Builder
+	columns := 0
+	for _, row := range env {
+		columns += len(row) * int(plantSpeciesCount)
+	}
+	buf.Grow(columns*24 + len(env)*2 + 160)
 	const reset = "\033[0m"
 	const darkRedAccent = "\033[38;5;88m"
 	buf.WriteString("\033[H\033[2J")
@@ -498,20 +503,48 @@ func renderMap(env [][]environment) string {
 		for j := range env[i] {
 			cell := env[i][j]
 			creatures := cell.creatureList
+			hasCarnivore := cellHasCarnivore(creatures)
 			for position := 0; position < int(plantSpeciesCount); position++ {
 				plant := cell.plants[position]
 				bg, texture := plantTexture(PlantSpecies(position), plant.biomass, cell.capacity)
 				buf.WriteString(bg)
-				if position < len(creatures) && creatures[position] != nil {
-					creature := creatures[position]
-					if creature.isCarnivore() {
-						fmt.Fprintf(&buf, "%s%c", darkRedAccent, creature.char)
+				glyph, foreground := texture, ""
+				switch {
+				case hasCarnivore && len(creatures) == 1:
+					if position == 0 {
+						glyph, foreground = '[', darkRedAccent
+					} else if position == 1 {
+						glyph, foreground = creatures[0].char, creatures[0].colorCode
 					} else {
-						fmt.Fprintf(&buf, "%s%c", creature.colorCode, creature.char)
+						glyph, foreground = ']', darkRedAccent
 					}
-				} else {
-					buf.WriteRune(texture)
+				case hasCarnivore && len(creatures) > 1:
+					glyph, foreground = [3]rune{'[', rune('0' + min(len(creatures), 9)), ']'}[position], darkRedAccent
+				case len(creatures) > 3:
+					first := creatures[0]
+					switch position {
+					case 0:
+						glyph, foreground = first.char, first.colorCode
+					case 1:
+						glyph = '+'
+					case 2:
+						glyph = rune('0' + min(len(creatures)-1, 9))
+					}
+				case len(creatures) == 1:
+					if position == 1 {
+						glyph, foreground = creatures[0].char, creatures[0].colorCode
+					} else {
+						glyph = ' '
+					}
+				default:
+					if position < len(creatures) && creatures[position] != nil {
+						glyph, foreground = creatures[position].char, creatures[position].colorCode
+					}
 				}
+				if foreground != "" {
+					buf.WriteString(foreground)
+				}
+				buf.WriteRune(glyph)
 				buf.WriteString(reset)
 			}
 		}
@@ -580,19 +613,11 @@ type plantUpdateResult struct {
 // then applies growth and propagule transfers without within-tick cascades.
 func updatePlants(env [][]environment) plantUpdateResult {
 	var result plantUpdateResult
-	snapshot := make([][][plantSpeciesCount]plantPopulation, len(env))
-	for y := range env {
-		snapshot[y] = make([][plantSpeciesCount]plantPopulation, len(env[y]))
-		for x := range env[y] {
-			snapshot[y][x] = env[y][x].plants
-		}
-	}
-
 	var intents []plantSpreadIntent
-	for y := range snapshot {
-		for x := range snapshot[y] {
+	for y := range env {
+		for x := range env[y] {
 			for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
-				colony := snapshot[y][x][species]
+				colony := env[y][x].plants[species]
 				config := plantSpread[species]
 				spreadProbability := colony.spreadProbability
 				if spreadProbability <= 0 {
@@ -603,7 +628,7 @@ func updatePlants(env [][]environment) plantUpdateResult {
 				}
 				offset := config.offsets[RandIntn(len(config.offsets))]
 				targetX, targetY := x+offset[0], y+offset[1]
-				if targetY < 0 || targetY >= len(snapshot) || targetX < 0 || targetX >= len(snapshot[targetY]) || snapshot[targetY][targetX][species].biomass > 0 {
+				if targetY < 0 || targetY >= len(env) || targetX < 0 || targetX >= len(env[targetY]) || env[targetY][targetX].plants[species].biomass > 0 {
 					continue
 				}
 				intents = append(intents, plantSpreadIntent{
@@ -619,24 +644,32 @@ func updatePlants(env [][]environment) plantUpdateResult {
 			result.biomassAdded += regrowPlants(&env[y][x])
 		}
 	}
-	sort.Slice(intents, func(i, j int) bool {
-		a, b := intents[i], intents[j]
+	slices.SortFunc(intents, func(a, b plantSpreadIntent) int {
 		if a.priority != b.priority {
-			return a.priority < b.priority
+			if a.priority < b.priority {
+				return -1
+			}
+			return 1
 		}
 		if a.targetY != b.targetY {
-			return a.targetY < b.targetY
+			return a.targetY - b.targetY
 		}
 		if a.targetX != b.targetX {
-			return a.targetX < b.targetX
+			return a.targetX - b.targetX
 		}
 		if a.sourceY != b.sourceY {
-			return a.sourceY < b.sourceY
+			return a.sourceY - b.sourceY
 		}
 		if a.sourceX != b.sourceX {
-			return a.sourceX < b.sourceX
+			return a.sourceX - b.sourceX
 		}
-		return a.species < b.species
+		if a.species < b.species {
+			return -1
+		}
+		if a.species > b.species {
+			return 1
+		}
+		return 0
 	})
 	for _, intent := range intents {
 		source := &env[intent.sourceY][intent.sourceX]
