@@ -758,8 +758,7 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 		}
 		population.biomass -= amount
 		if population.biomass <= 1e-12 {
-			population.biomass = 0
-			population.growthProgress = 0
+			*population = plantPopulation{}
 		}
 		consumed += amount
 		remaining -= amount

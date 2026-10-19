@@ -2,6 +2,7 @@ package main
 
 import (
 	"math"
+	"math/rand"
 	"testing"
 )
 
@@ -18,6 +19,10 @@ func TestSeededWorldStartsWithAllPlantSpeciesWithinSharedCapacity(t *testing.T) 
 	for index, plant := range state.Plants {
 		if plant.Species != PlantSpecies(index) {
 			t.Fatalf("plant slot %d has species %v", index, plant.Species)
+		}
+		traits := plantTraits[index]
+		if plant.Generation != 0 || plant.RegrowthRate != traits.regrowth || plant.SpreadProbability != traits.spreadProbability || plant.NutritionalYield != traits.nutrition {
+			t.Errorf("founder species %v has non-baseline state: %+v", plant.Species, plant)
 		}
 		if plant.Biomass <= 0 {
 			t.Errorf("species %v was not seeded", plant.Species)
@@ -253,6 +258,339 @@ func TestPlantColoniesSpreadLocallyWithoutSameTickCascade(t *testing.T) {
 		t.Fatal("grass did not spread with any of 1000 deterministic seeds")
 	}
 }
+
+func TestNewPlantColonyInheritsItsParentsTraitsAndGeneration(t *testing.T) {
+	defer ResetRand(1)
+	SetRand(rand.New(&scriptedPlantRandom{values: []int64{0, 0, 0, 1 << 62}}))
+	env := make([][]environment, 3)
+	for y := range env {
+		env[y] = make([]environment, 3)
+		for x := range env[y] {
+			env[y][x].capacity = plantCellCapacity
+		}
+	}
+	parent := plantPopulation{
+		biomass: 25, generation: 4, regrowthRate: 0.083,
+		spreadProbability: 1, nutritionalYield: 15.25,
+	}
+	env[1][1].plants[PlantGrass] = parent
+
+	processEnvironment(env, &TickStats{}, nil)
+
+	child, ok := PlantCellAt(env, 2, 1)
+	if !ok || !child.Plants[PlantGrass].Present {
+		t.Fatal("expected grass colony to establish at its selected neighbor")
+	}
+	colony := child.Plants[PlantGrass]
+	if colony.Generation != parent.generation+1 {
+		t.Fatalf("daughter generation = %d, want %d", colony.Generation, parent.generation+1)
+	}
+	if colony.RegrowthRate != parent.regrowthRate || colony.SpreadProbability != parent.spreadProbability || colony.NutritionalYield != parent.nutritionalYield {
+		t.Fatalf("daughter did not inherit parent traits: %+v", colony)
+	}
+}
+
+func TestPlantEstablishmentMutatesAtMostOneTraitWithinBounds(t *testing.T) {
+	defer ResetRand(1)
+	SetRand(rand.New(&scriptedPlantRandom{values: []int64{0, 0, 0, 0, 0, 0, (1 << 63) - 1 - (1 << 53)}}))
+	env := make([][]environment, 3)
+	for y := range env {
+		env[y] = make([]environment, 3)
+		for x := range env[y] {
+			env[y][x].capacity = plantCellCapacity
+		}
+	}
+	parent := plantPopulation{
+		biomass: 25, regrowthRate: 0.08, spreadProbability: 1, nutritionalYield: 15,
+	}
+	env[1][1].plants[PlantGrass] = parent
+
+	processEnvironment(env, &TickStats{}, nil)
+
+	daughter, _ := PlantCellAt(env, 2, 1)
+	child := daughter.Plants[PlantGrass]
+	changed := 0
+	if child.RegrowthRate != parent.regrowthRate {
+		changed++
+		relative := math.Abs(child.RegrowthRate/parent.regrowthRate - 1)
+		if relative > 0.0025+1e-12 {
+			t.Fatalf("regrowth mutation changed %.5f relative, limit is 0.0025", relative)
+		}
+	}
+	if child.SpreadProbability != parent.spreadProbability {
+		changed++
+	}
+	if child.NutritionalYield != parent.nutritionalYield {
+		changed++
+	}
+	if changed != 1 {
+		t.Fatalf("mutation changed %d traits, want exactly one: %+v", changed, child)
+	}
+	if child.RegrowthRate < plantTraits[PlantGrass].regrowth*0.8 || child.RegrowthRate > plantTraits[PlantGrass].regrowth*1.2 {
+		t.Fatalf("regrowth mutation outside species bounds: %.8f", child.RegrowthRate)
+	}
+	if got := env[1][1].plants[PlantGrass]; got.regrowthRate != parent.regrowthRate || got.spreadProbability != parent.spreadProbability || got.nutritionalYield != parent.nutritionalYield {
+		t.Fatalf("daughter mutation changed its parent cohort: %+v", got)
+	}
+	base := plantTraits[PlantGrass]
+	if base.regrowth != 0.08 || base.spreadProbability != 0.02 || base.nutrition != 15 {
+		t.Fatalf("daughter mutation changed species baselines: %+v", base)
+	}
+}
+
+func TestEachPlantTraitMutationStaysInsideSpeciesBounds(t *testing.T) {
+	defer ResetRand(1)
+	for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
+		base := plantTraits[species]
+		baseValues := []float64{base.regrowth, base.spreadProbability, base.nutrition}
+		for traitIndex := 0; traitIndex < len(baseValues); traitIndex++ {
+			minimum, maximum := baseValues[traitIndex]*0.8, baseValues[traitIndex]*1.2
+			for _, test := range []struct {
+				name  string
+				start float64
+				draw  int64
+			}{
+				{name: "lower bound", start: minimum, draw: (1 << 63) - 1 - (1 << 53)},
+				{name: "upper bound", start: maximum, draw: 0},
+			} {
+				traits := plantPopulation{
+					regrowthRate: base.regrowth, spreadProbability: base.spreadProbability,
+					nutritionalYield: base.nutrition,
+				}
+				switch traitIndex {
+				case 0:
+					traits.regrowthRate = test.start
+				case 1:
+					traits.spreadProbability = test.start
+				case 2:
+					traits.nutritionalYield = test.start
+				}
+				SetRand(rand.New(&scriptedPlantRandom{values: []int64{
+					0, 0, 0, 0, int64(traitIndex) << 32, test.draw,
+				}}))
+				env := make([][]environment, 5)
+				for y := range env {
+					env[y] = make([]environment, 5)
+					for x := range env[y] {
+						env[y][x].capacity = plantCellCapacity
+					}
+				}
+				traits.biomass = plantSpread[species].threshold + 1
+				traits.spreadProbability = 1
+				// For this trait, test the cohort's actual bounded probability.
+				if traitIndex == 1 {
+					traits.spreadProbability = test.start
+				}
+				sourceX, sourceY := 2, 2
+				env[sourceY][sourceX].plants[species] = traits
+				processEnvironment(env, &TickStats{}, nil)
+				dx, dy := plantSpread[species].offsets[0][0], plantSpread[species].offsets[0][1]
+				child := env[sourceY+dy][sourceX+dx].plants[species]
+				value := []float64{child.regrowthRate, child.spreadProbability, child.nutritionalYield}[traitIndex]
+				if value < minimum || value > maximum {
+					t.Errorf("%v trait %d %s mutation produced %.8f outside [%.8f, %.8f]", species, traitIndex, test.name, value, minimum, maximum)
+				}
+				if value == test.start || math.Abs(value/test.start-1) > plantMutationMagnitude+1e-12 {
+					t.Errorf("%v trait %d %s mutation exceeded limit: %.8f -> %.8f", species, traitIndex, test.name, test.start, value)
+				}
+			}
+		}
+	}
+}
+
+func TestColonyTraitsAffectFoodSeekingEatingAndRegrowth(t *testing.T) {
+	env := make([][]environment, 3)
+	for y := range env {
+		env[y] = make([]environment, 3)
+		for x := range env[y] {
+			env[y][x].capacity = plantCellCapacity
+		}
+	}
+	// This inherited cohort is more nutritious and grows faster than baseline grass.
+	env[1][2].plants[PlantGrass] = plantPopulation{
+		biomass: 10, regrowthRate: 0.16, spreadProbability: 0.02, nutritionalYield: 30,
+	}
+	env[2][1].plants[PlantGrass] = plantPopulation{
+		biomass: 19, regrowthRate: 0.08, spreadProbability: 0.02, nutritionalYield: 15,
+	}
+	creature := &Creature{
+		X: 1, Y: 1, health: 100, maxHealth: 100,
+		nutrition: 500, maxNutrition: 1000, maxAge: 100, vision: 8,
+	}
+	intent := creature.decideAction(env)
+	if intent.Type != "move" || intent.TargetX != 2 || intent.TargetY != 1 {
+		t.Fatalf("food seeking ignored local nutritional yield: %+v", intent)
+	}
+
+	creature.X, creature.Y = 2, 1
+	resolveEat(ActionIntent{Creature: creature, Type: "eat"}, env, &TickStats{})
+	if creature.nutrition != 650 {
+		t.Fatalf("eating gained %d nutrition, want 150 on top of 500", creature.nutrition)
+	}
+	before := env[1][2].plants[PlantGrass].biomass
+	processEnvironment(env, &TickStats{}, nil)
+	if got := env[1][2].plants[PlantGrass].biomass - before; got <= env[2][1].plants[PlantGrass].biomass-19 {
+		t.Fatalf("higher regrowth trait did not affect growth: high=%.4f, baseline=%.4f", got, env[2][1].plants[PlantGrass].biomass-19)
+	}
+}
+
+func TestInheritedSpreadProbabilityChangesEstablishmentOutcome(t *testing.T) {
+	defer ResetRand(1)
+	// This draw is just above the grass baseline and just below a +0.25% trait.
+	chanceDraw := int64(0.020025 * float64(uint64(1)<<63))
+	spread := func(probability float64) float64 {
+		SetRand(rand.New(&scriptedPlantRandom{values: []int64{chanceDraw, 0, 0, 1 << 62}}))
+		env := [][]environment{{
+			{capacity: plantCellCapacity, plants: [plantSpeciesCount]plantPopulation{{
+				biomass: 20, regrowthRate: 0.08, spreadProbability: probability, nutritionalYield: 15,
+			}}},
+			{capacity: plantCellCapacity},
+		}}
+		stats := &TickStats{}
+		processEnvironment(env, stats, nil)
+		return stats.BiomassTransferred[PlantGrass]
+	}
+
+	baselineTransfers := spread(plantTraits[PlantGrass].spreadProbability)
+	mutatedTransfers := spread(plantTraits[PlantGrass].spreadProbability * 1.0025)
+	if baselineTransfers != 0 || mutatedTransfers != 1 {
+		t.Fatalf("spread probability did not change the seeded outcome: baseline %.0f, mutated %.0f", baselineTransfers, mutatedTransfers)
+	}
+}
+
+func TestFailedEstablishmentAndOrdinaryRegrowthDoNotMutateColonies(t *testing.T) {
+	defer ResetRand(1)
+	parent := plantPopulation{
+		biomass: 25, generation: 3, regrowthRate: 0.081,
+		spreadProbability: 1, nutritionalYield: 15.1,
+	}
+	env := make([][]environment, 3)
+	for y := range env {
+		env[y] = make([]environment, 3)
+		for x := range env[y] {
+			env[y][x].capacity = plantCellCapacity
+		}
+	}
+	env[1][1].plants[PlantGrass] = parent
+	env[1][2].plants[PlantGrass] = plantPopulation{
+		biomass: 2, generation: 7, regrowthRate: 0.079,
+		spreadProbability: 0.021, nutritionalYield: 14.9,
+	}
+	SetRand(rand.New(&scriptedPlantRandom{values: []int64{0, 0, 1 << 62}}))
+	stats := &TickStats{}
+	processEnvironment(env, stats, nil)
+	if stats.BiomassTransferred[PlantGrass] != 0 {
+		t.Fatalf("existing same-species colony was overwritten: %+v", stats.BiomassTransferred)
+	}
+	if got := env[1][1].plants[PlantGrass]; got.generation != parent.generation || got.regrowthRate != parent.regrowthRate || got.spreadProbability != parent.spreadProbability || got.nutritionalYield != parent.nutritionalYield {
+		t.Fatalf("failed establishment mutated parent traits: %+v", got)
+	}
+	if got := env[1][2].plants[PlantGrass]; got.generation != 7 || got.regrowthRate != 0.079 || got.spreadProbability != 0.021 || got.nutritionalYield != 14.9 {
+		t.Fatalf("existing colony traits changed during ordinary regrowth: %+v", got)
+	}
+
+	regrowthOnly := environment{
+		capacity: plantCellCapacity,
+		plants: [plantSpeciesCount]plantPopulation{{
+			biomass: 5, generation: 2, regrowthRate: 0.087,
+			spreadProbability: 0.022, nutritionalYield: 15.3,
+		}},
+	}
+	SetRand(rand.New(&scriptedPlantRandom{}))
+	regrowthEnv := [][]environment{{regrowthOnly}}
+	processEnvironment(regrowthEnv, &TickStats{}, nil)
+	if got := regrowthEnv[0][0].plants[PlantGrass]; got.generation != 2 || got.regrowthRate != 0.087 || got.spreadProbability != 0.022 || got.nutritionalYield != 15.3 {
+		t.Fatalf("ordinary regrowth changed plant traits: %+v", got)
+	}
+}
+
+func TestExtinctColonyLosesItsTraitsAndRecolonizesFromNewParent(t *testing.T) {
+	defer ResetRand(1)
+	creature := &Creature{X: 0, Y: 0, maxNutrition: 1000}
+	env := [][]environment{{
+		{capacity: plantCellCapacity, plants: [plantSpeciesCount]plantPopulation{{
+			biomass: 0.5, generation: 7, regrowthRate: 0.081,
+			spreadProbability: 0.021, nutritionalYield: 15.1,
+		}}},
+		{capacity: plantCellCapacity},
+	}}
+	resolveEat(ActionIntent{Creature: creature, Type: "eat"}, env, &TickStats{})
+	state, _ := PlantCellAt(env, 0, 0)
+	grass := state.Plants[PlantGrass]
+	if grass.Present || grass.Biomass != 0 || grass.Generation != 0 {
+		t.Fatalf("extinct colony still has local state: %+v", grass)
+	}
+	if grass.RegrowthRate != plantTraits[PlantGrass].regrowth || grass.SpreadProbability != plantTraits[PlantGrass].spreadProbability || grass.NutritionalYield != plantTraits[PlantGrass].nutrition {
+		t.Fatalf("extinct colony retained non-founder traits: %+v", grass)
+	}
+
+	parent := plantPopulation{
+		biomass: 25, generation: 2, regrowthRate: 0.09,
+		spreadProbability: 1, nutritionalYield: 16,
+	}
+	env[0][1].plants[PlantGrass] = parent
+	SetRand(rand.New(&scriptedPlantRandom{values: []int64{0, 1 << 32, 0, 1 << 62}}))
+	processEnvironment(env, &TickStats{}, nil)
+	recolonized, _ := PlantCellAt(env, 0, 0)
+	child := recolonized.Plants[PlantGrass]
+	if !child.Present || child.Generation != parent.generation+1 || child.RegrowthRate != parent.regrowthRate || child.SpreadProbability != parent.spreadProbability || child.NutritionalYield != parent.nutritionalYield {
+		t.Fatalf("recolonized plant did not inherit new parent's traits: %+v", child)
+	}
+}
+
+func TestSeededPlantMutationRateIsRareRelativeToCreatureCloning(t *testing.T) {
+	defer ResetRand(1)
+	ResetRand(20261019)
+	parent := plantPopulation{
+		regrowthRate:      plantTraits[PlantGrass].regrowth,
+		spreadProbability: plantTraits[PlantGrass].spreadProbability,
+		nutritionalYield:  plantTraits[PlantGrass].nutrition,
+	}
+	const establishments = 100_000
+	mutations := 0
+	for range establishments {
+		child := inheritPlantColony(parent, PlantGrass)
+		changes := 0
+		for _, pair := range [][2]float64{
+			{parent.regrowthRate, child.regrowthRate},
+			{parent.spreadProbability, child.spreadProbability},
+			{parent.nutritionalYield, child.nutritionalYield},
+		} {
+			if pair[0] != pair[1] {
+				changes++
+				if math.Abs(pair[1]/pair[0]-1) > plantMutationMagnitude+1e-12 {
+					t.Fatalf("seeded mutation exceeded magnitude: %v -> %v", pair[0], pair[1])
+				}
+			}
+		}
+		if changes > 1 {
+			t.Fatalf("one establishment changed %d traits", changes)
+		}
+		if changes == 1 {
+			mutations++
+		}
+	}
+	if mutations < 50 || mutations > 150 {
+		t.Fatalf("seeded mutation sample = %d/%d, outside the expected rare range", mutations, establishments)
+	}
+	t.Logf("seeded sample: %d mutations per %d successful establishments (%.3f%%); creature clones perturb five continuous traits by about ±1%% per clone", mutations, establishments, 100*float64(mutations)/establishments)
+}
+
+type scriptedPlantRandom struct {
+	values []int64
+	index  int
+}
+
+func (s *scriptedPlantRandom) Int63() int64 {
+	if s.index >= len(s.values) {
+		return 1 << 62
+	}
+	value := s.values[s.index]
+	s.index++
+	return value
+}
+
+func (s *scriptedPlantRandom) Seed(int64) {}
 
 func TestEachPlantSpeciesUsesItsDocumentedSpreadNeighborhood(t *testing.T) {
 	observed := [plantSpeciesCount]bool{}

@@ -60,24 +60,27 @@ const (
 )
 
 const plantCellCapacity = 100.0
+const plantMutationProbability = 0.001
+const plantMutationMagnitude = 0.0025
 
 var plantSpread = [plantSpeciesCount]struct {
-	threshold   float64
-	probability float64
-	offsets     [][2]int
+	threshold float64
+	offsets   [][2]int
 }{
-	{threshold: 20, probability: 0.02, offsets: [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}},
-	{threshold: 30, probability: 0.01, offsets: [][2]int{{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}}},
-	{threshold: 40, probability: 0.005, offsets: [][2]int{{-2, -2}, {-1, -2}, {0, -2}, {1, -2}, {2, -2}, {-2, -1}, {-1, -1}, {0, -1}, {1, -1}, {2, -1}, {-2, 0}, {-1, 0}, {1, 0}, {2, 0}, {-2, 1}, {-1, 1}, {0, 1}, {1, 1}, {2, 1}, {-2, 2}, {-1, 2}, {0, 2}, {1, 2}, {2, 2}}},
+	{threshold: 20, offsets: [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}},
+	{threshold: 30, offsets: [][2]int{{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}}},
+	{threshold: 40, offsets: [][2]int{{-2, -2}, {-1, -2}, {0, -2}, {1, -2}, {2, -2}, {-2, -1}, {-1, -1}, {0, -1}, {1, -1}, {2, -1}, {-2, 0}, {-1, 0}, {1, 0}, {2, 0}, {-2, 1}, {-1, 1}, {0, 1}, {1, 1}, {2, 1}, {-2, 2}, {-1, 2}, {0, 2}, {1, 2}, {2, 2}}},
 }
 
 type PlantState struct {
-	Species          PlantSpecies
-	Present          bool
-	Biomass          float64
-	GrowthProgress   float64
-	RegrowthRate     float64
-	NutritionalYield float64
+	Species           PlantSpecies
+	Present           bool
+	Biomass           float64
+	Generation        int
+	GrowthProgress    float64
+	RegrowthRate      float64
+	SpreadProbability float64
+	NutritionalYield  float64
 }
 
 type PlantCellState struct {
@@ -86,10 +89,12 @@ type PlantCellState struct {
 }
 
 type plantPopulation struct {
-	biomass          float64
-	growthProgress   float64
-	regrowthRate     float64
-	nutritionalYield float64
+	biomass           float64
+	generation        int
+	growthProgress    float64
+	regrowthRate      float64
+	spreadProbability float64
+	nutritionalYield  float64
 }
 
 type environment struct {
@@ -99,12 +104,13 @@ type environment struct {
 }
 
 var plantTraits = [plantSpeciesCount]struct {
-	regrowth  float64
-	nutrition float64
+	regrowth          float64
+	spreadProbability float64
+	nutrition         float64
 }{
-	{regrowth: 0.08, nutrition: 15},
-	{regrowth: 0.04, nutrition: 20},
-	{regrowth: 0.02, nutrition: 10},
+	{regrowth: 0.08, spreadProbability: 0.02, nutrition: 15},
+	{regrowth: 0.04, spreadProbability: 0.01, nutrition: 20},
+	{regrowth: 0.02, spreadProbability: 0.005, nutrition: 10},
 }
 
 // PlantCellAt returns a value snapshot in stable grass, clover, bramble order.
@@ -117,20 +123,25 @@ func PlantCellAt(env [][]environment, x, y int) (PlantCellState, bool) {
 	state := PlantCellState{Capacity: cell.capacity}
 	for i, population := range cell.plants {
 		traits := plantTraits[i]
-		regrowthRate, nutritionalYield := population.regrowthRate, population.nutritionalYield
+		regrowthRate, spreadProbability, nutritionalYield := population.regrowthRate, population.spreadProbability, population.nutritionalYield
 		if regrowthRate <= 0 {
 			regrowthRate = traits.regrowth
+		}
+		if spreadProbability <= 0 {
+			spreadProbability = traits.spreadProbability
 		}
 		if nutritionalYield <= 0 {
 			nutritionalYield = traits.nutrition
 		}
 		state.Plants[i] = PlantState{
-			Species:          PlantSpecies(i),
-			Present:          population.biomass > 0,
-			Biomass:          population.biomass,
-			GrowthProgress:   population.growthProgress,
-			RegrowthRate:     regrowthRate,
-			NutritionalYield: nutritionalYield,
+			Species:           PlantSpecies(i),
+			Present:           population.biomass > 0,
+			Biomass:           population.biomass,
+			Generation:        population.generation,
+			GrowthProgress:    population.growthProgress,
+			RegrowthRate:      regrowthRate,
+			SpreadProbability: spreadProbability,
+			NutritionalYield:  nutritionalYield,
 		}
 	}
 	return state, true
@@ -368,9 +379,10 @@ func seedPlants(env [][]environment) {
 			}
 			for species, biomass := range requested[y][x] {
 				env[y][x].plants[species] = plantPopulation{
-					biomass:          biomass * scale,
-					regrowthRate:     plantTraits[species].regrowth,
-					nutritionalYield: plantTraits[species].nutrition,
+					biomass:           biomass * scale,
+					regrowthRate:      plantTraits[species].regrowth,
+					spreadProbability: plantTraits[species].spreadProbability,
+					nutritionalYield:  plantTraits[species].nutrition,
 				}
 			}
 		}
@@ -519,7 +531,11 @@ func updatePlants(env [][]environment) (float64, [plantSpeciesCount]float64) {
 			for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
 				colony := snapshot[y][x][species]
 				config := plantSpread[species]
-				if colony.biomass < config.threshold || RandFloat64() >= config.probability || len(config.offsets) == 0 {
+				spreadProbability := colony.spreadProbability
+				if spreadProbability <= 0 {
+					spreadProbability = plantTraits[species].spreadProbability
+				}
+				if colony.biomass < config.threshold || RandFloat64() >= spreadProbability || len(config.offsets) == 0 {
 					continue
 				}
 				offset := config.offsets[RandIntn(len(config.offsets))]
@@ -573,14 +589,70 @@ func updatePlants(env [][]environment) (float64, [plantSpeciesCount]float64) {
 		if target.capacity-total < 1 {
 			continue
 		}
+		child := inheritPlantColony(source.plants[intent.species], intent.species)
 		source.plants[intent.species].biomass--
-		target.plants[intent.species] = plantPopulation{
-			biomass: 1, regrowthRate: source.plants[intent.species].regrowthRate,
-			nutritionalYield: source.plants[intent.species].nutritionalYield,
+		if source.plants[intent.species].biomass <= 1e-12 {
+			source.plants[intent.species] = plantPopulation{}
 		}
+		target.plants[intent.species] = child
 		transferred[intent.species]++
 	}
 	return added, transferred
+}
+
+func inheritPlantColony(parent plantPopulation, species PlantSpecies) plantPopulation {
+	traits := plantTraits[species]
+	regrowthRate, spreadProbability, nutritionalYield := parent.regrowthRate, parent.spreadProbability, parent.nutritionalYield
+	if regrowthRate <= 0 {
+		regrowthRate = traits.regrowth
+	}
+	if spreadProbability <= 0 {
+		spreadProbability = traits.spreadProbability
+	}
+	if nutritionalYield <= 0 {
+		nutritionalYield = traits.nutrition
+	}
+	child := plantPopulation{
+		biomass: 1, generation: parent.generation + 1,
+		regrowthRate: regrowthRate, spreadProbability: spreadProbability,
+		nutritionalYield: nutritionalYield,
+	}
+	if RandFloat64() < plantMutationProbability {
+		mutatePlantTrait(&child, species, RandIntn(3), (RandFloat64()*2-1)*plantMutationMagnitude)
+	}
+	return child
+}
+
+func mutatePlantTrait(colony *plantPopulation, species PlantSpecies, traitIndex int, relativeChange float64) {
+	base := plantTraits[species]
+	if relativeChange < -plantMutationMagnitude {
+		relativeChange = -plantMutationMagnitude
+	}
+	if relativeChange > plantMutationMagnitude {
+		relativeChange = plantMutationMagnitude
+	}
+
+	var value, baseValue float64
+	switch traitIndex {
+	case 0:
+		value, baseValue = colony.regrowthRate, base.regrowth
+	case 1:
+		value, baseValue = colony.spreadProbability, base.spreadProbability
+	case 2:
+		value, baseValue = colony.nutritionalYield, base.nutrition
+	default:
+		return
+	}
+	minimum, maximum := baseValue*0.8, baseValue*1.2
+	value = minFloat(maximum, maxFloat(minimum, value*(1+relativeChange)))
+	switch traitIndex {
+	case 0:
+		colony.regrowthRate = value
+	case 1:
+		colony.spreadProbability = value
+	case 2:
+		colony.nutritionalYield = value
+	}
 }
 
 func regrowPlants(cell *environment) float64 {
