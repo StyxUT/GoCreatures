@@ -66,3 +66,20 @@ parent to daughter colony. Tick-start snapshots prevent same-tick cascades.
 Growth (`BiomassAdded`), establishment transfers (`BiomassTransferred`) and
 grazing (`BiomassConsumed`) are accounted separately. Empty regions and extinct
 species do not spontaneously reappear.
+
+## Plant settings and reports
+
+| Species | Regrowth / tick | Nutrition / biomass | Spread threshold | Attempt / eligible tick | Neighborhood |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Grass | 0.08 | 15 | 20 | 0.02 | cardinal |
+| Clover | 0.04 | 20 | 30 | 0.01 | eight adjacent cells |
+| Bramble | 0.02 | 10 | 40 | 0.005 | within Chebyshev distance two |
+
+Each successful establishment copies the parent's local cohort and has a 0.001
+mutation probability. At most one of regrowth, spread probability or nutrition
+changes by up to 0.25% relative; values stay within 80–120% of the species
+baseline. The report shows final-snapshot biomass, occupied cells and
+biomass-weighted trait means, plus per-tick establishment/mutation/grazing and
+cumulative growth, transfers, consumption and evolution events. A species with
+no living colonies reports zero biomass, occupancy and trait means. The seeded
+diagnostic is `go test -run '^TestSeededPlantMutationRateIsRareRelativeToCreatureCloning$' -count=1 -v`; it samples 100,000 establishment opportunities and records realized plant mutations against the larger per-clone creature trait perturbations. This is an opportunity-rate comparison, not a wall-clock coexistence guarantee.

@@ -138,6 +138,9 @@ func TestHerbivoreEatsHighestYieldFirstAndTracksFractionalBiomass(t *testing.T) 
 	if got, want := stats.BiomassConsumed, 5.0; got != want {
 		t.Errorf("biomass consumed = %.2f, want %.2f", got, want)
 	}
+	if math.Abs(stats.PlantBiomassConsumed[PlantGrass]-4.5) > 1e-9 || math.Abs(stats.PlantBiomassConsumed[PlantClover]-0.2) > 1e-9 || math.Abs(stats.PlantBiomassConsumed[PlantBramble]-0.3) > 1e-9 {
+		t.Errorf("per-species grazing = %+v, want grass 4.5 clover 0.2 bramble 0.3", stats.PlantBiomassConsumed)
+	}
 	if creature.nutrition != 74 || creature.nutritionProgress != 0.5 {
 		t.Errorf("nutrition progress = %d + %.2f, want 74 + 0.50", creature.nutrition, creature.nutritionProgress)
 	}
@@ -287,6 +290,23 @@ func TestNewPlantColonyInheritsItsParentsTraitsAndGeneration(t *testing.T) {
 	}
 	if colony.RegrowthRate != parent.regrowthRate || colony.SpreadProbability != parent.spreadProbability || colony.NutritionalYield != parent.nutritionalYield {
 		t.Fatalf("daughter did not inherit parent traits: %+v", colony)
+	}
+}
+
+func TestSuccessfulMutationIsCountedOnceInTickAndCumulativeStats(t *testing.T) {
+	defer ResetRand(1)
+	SetRand(rand.New(&scriptedPlantRandom{values: []int64{0, 0, 0, 0, 0, (1 << 63) - 1}}))
+	env := [][]environment{{
+		{capacity: plantCellCapacity, plants: [plantSpeciesCount]plantPopulation{{biomass: 25, spreadProbability: 1}}},
+		{capacity: plantCellCapacity},
+	}}
+	stats := &TickStats{}
+	simulateTick(env, func(*Creature) *Creature { return nil }, stats, nil)
+	if stats.PlantEstablishments[PlantGrass] != 1 || stats.PlantMutations[PlantGrass] != 1 {
+		t.Fatalf("tick establishment/mutation counts = %d/%d, want 1/1", stats.PlantEstablishments[PlantGrass], stats.PlantMutations[PlantGrass])
+	}
+	if stats.PlantCumulative.Establishments[PlantGrass] != 1 || stats.PlantCumulative.Mutations[PlantGrass] != 1 {
+		t.Fatalf("cumulative establishment/mutation counts = %d/%d, want 1/1", stats.PlantCumulative.Establishments[PlantGrass], stats.PlantCumulative.Mutations[PlantGrass])
 	}
 }
 

@@ -13,28 +13,48 @@ import (
 )
 
 type TickStats struct {
-	Tick               int
-	TotalCreatures     int
-	TotalCarnivores    int
-	TotalHerbivores    int
-	TotalDeaths        int
-	AgeDeaths          int
-	StarvationDeaths   int
-	FightDeaths        int
-	TotalAge           int
-	TotalHealth        int
-	TotalNutrition     int
-	Clones             int
-	Eats               int
-	Moves              int
-	Fights             int
-	Sleeps             int
+	Tick                 int
+	TotalCreatures       int
+	TotalCarnivores      int
+	TotalHerbivores      int
+	TotalDeaths          int
+	AgeDeaths            int
+	StarvationDeaths     int
+	FightDeaths          int
+	TotalAge             int
+	TotalHealth          int
+	TotalNutrition       int
+	Clones               int
+	Eats                 int
+	Moves                int
+	Fights               int
+	Sleeps               int
+	BiomassAdded         float64
+	HealthAdded          int
+	BiomassConsumed      float64
+	BiomassTransferred   [plantSpeciesCount]float64
+	PlantBiomassConsumed [plantSpeciesCount]float64
+	PlantBiomass         [plantSpeciesCount]float64
+	PlantOccupiedCells   [plantSpeciesCount]int
+	PlantEstablishments  [plantSpeciesCount]int
+	PlantMutations       [plantSpeciesCount]int
+	PlantTraits          [plantSpeciesCount]PlantTraitSummary
+	PlantCapacity        float64
+	PlantCumulative      PlantCumulativeTotals
+}
+
+type PlantTraitSummary struct {
+	RegrowthRate      float64
+	SpreadProbability float64
+	NutritionalYield  float64
+}
+
+type PlantCumulativeTotals struct {
 	BiomassAdded       float64
-	HealthAdded        int
-	BiomassConsumed    float64
 	BiomassTransferred [plantSpeciesCount]float64
-	PlantBiomass       [plantSpeciesCount]float64
-	PlantCapacity      float64
+	BiomassConsumed    [plantSpeciesCount]float64
+	Establishments     [plantSpeciesCount]int
+	Mutations          [plantSpeciesCount]int
 }
 
 type CarnivoreActionTotals struct {
@@ -183,6 +203,7 @@ func main() {
 	var tickCount int
 	var ancestryStats []AncestryStats
 	var carnivoreTotals CarnivoreActionTotals
+	var tickStats TickStats
 
 	tickCh := startTicker(time.Duration(tickIntervalMillis) * time.Millisecond)
 
@@ -198,7 +219,6 @@ func main() {
 			}
 
 			tickCount++
-			var tickStats TickStats
 			tickStats.Tick = tickCount
 
 			simulateTick(env, creatureFac.create, &tickStats, &carnivoreTotals)
@@ -391,7 +411,8 @@ func seedPlants(env [][]environment) {
 
 func simulateTick(env [][]environment, creatureFac func(*Creature) *Creature, tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals) {
 	// Each result describes this tick; cumulative carnivore totals are separate.
-	*tickStats = TickStats{Tick: tickStats.Tick}
+	cumulativePlants := tickStats.PlantCumulative
+	*tickStats = TickStats{Tick: tickStats.Tick, PlantCumulative: cumulativePlants}
 	processEnvironment(env, tickStats, carnivoreTotals)
 	creatures := flattenCreatureList(env)
 	for _, c := range creatures {
@@ -425,10 +446,43 @@ func simulateTick(env [][]environment, creatureFac func(*Creature) *Creature, ti
 			cell := &env[y][x]
 			tickStats.PlantCapacity += cell.capacity
 			for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
-				tickStats.PlantBiomass[species] += cell.plants[species].biomass
+				population := cell.plants[species]
+				tickStats.PlantBiomass[species] += population.biomass
+				if population.biomass <= 0 {
+					continue
+				}
+				tickStats.PlantOccupiedCells[species]++
+				traits := plantTraits[species]
+				regrowth, spread, nutrition := population.regrowthRate, population.spreadProbability, population.nutritionalYield
+				if regrowth <= 0 {
+					regrowth = traits.regrowth
+				}
+				if spread <= 0 {
+					spread = traits.spreadProbability
+				}
+				if nutrition <= 0 {
+					nutrition = traits.nutrition
+				}
+				biomass := population.biomass
+				tickStats.PlantTraits[species].RegrowthRate += regrowth * biomass
+				tickStats.PlantTraits[species].SpreadProbability += spread * biomass
+				tickStats.PlantTraits[species].NutritionalYield += nutrition * biomass
 			}
 		}
 	}
+	for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
+		biomass := tickStats.PlantBiomass[species]
+		if biomass > 0 {
+			tickStats.PlantTraits[species].RegrowthRate /= biomass
+			tickStats.PlantTraits[species].SpreadProbability /= biomass
+			tickStats.PlantTraits[species].NutritionalYield /= biomass
+		}
+		tickStats.PlantCumulative.BiomassTransferred[species] += tickStats.BiomassTransferred[species]
+		tickStats.PlantCumulative.BiomassConsumed[species] += tickStats.PlantBiomassConsumed[species]
+		tickStats.PlantCumulative.Establishments[species] += tickStats.PlantEstablishments[species]
+		tickStats.PlantCumulative.Mutations[species] += tickStats.PlantMutations[species]
+	}
+	tickStats.PlantCumulative.BiomassAdded += tickStats.BiomassAdded
 }
 
 func printMap(env [][]environment) {
@@ -477,11 +531,13 @@ func cellHasCarnivore(creatures []*Creature) bool {
 }
 
 func processEnvironment(env [][]environment, tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals) {
-	added, transferred := updatePlants(env)
+	update := updatePlants(env)
 	if tickStats != nil {
-		tickStats.BiomassAdded += added
-		for species, amount := range transferred {
-			tickStats.BiomassTransferred[species] += amount
+		tickStats.BiomassAdded += update.biomassAdded
+		for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
+			tickStats.BiomassTransferred[species] += update.transferred[species]
+			tickStats.PlantEstablishments[species] += update.establishments[species]
+			tickStats.PlantMutations[species] += update.mutations[species]
 		}
 	}
 	for i := range env {
@@ -513,10 +569,17 @@ type plantSpreadIntent struct {
 	priority         float64
 }
 
+type plantUpdateResult struct {
+	biomassAdded   float64
+	transferred    [plantSpeciesCount]float64
+	establishments [plantSpeciesCount]int
+	mutations      [plantSpeciesCount]int
+}
+
 // updatePlants bases growth and spread decisions on one tick-start snapshot,
 // then applies growth and propagule transfers without within-tick cascades.
-func updatePlants(env [][]environment) (float64, [plantSpeciesCount]float64) {
-	var transferred [plantSpeciesCount]float64
+func updatePlants(env [][]environment) plantUpdateResult {
+	var result plantUpdateResult
 	snapshot := make([][][plantSpeciesCount]plantPopulation, len(env))
 	for y := range env {
 		snapshot[y] = make([][plantSpeciesCount]plantPopulation, len(env[y]))
@@ -551,10 +614,9 @@ func updatePlants(env [][]environment) (float64, [plantSpeciesCount]float64) {
 		}
 	}
 
-	added := 0.0
 	for y := range env {
 		for x := range env[y] {
-			added += regrowPlants(&env[y][x])
+			result.biomassAdded += regrowPlants(&env[y][x])
 		}
 	}
 	sort.Slice(intents, func(i, j int) bool {
@@ -589,18 +651,27 @@ func updatePlants(env [][]environment) (float64, [plantSpeciesCount]float64) {
 		if target.capacity-total < 1 {
 			continue
 		}
-		child := inheritPlantColony(source.plants[intent.species], intent.species)
+		child, mutated := inheritPlantColonyWithMutation(source.plants[intent.species], intent.species)
 		source.plants[intent.species].biomass--
 		if source.plants[intent.species].biomass <= 1e-12 {
 			source.plants[intent.species] = plantPopulation{}
 		}
 		target.plants[intent.species] = child
-		transferred[intent.species]++
+		result.transferred[intent.species]++
+		result.establishments[intent.species]++
+		if mutated {
+			result.mutations[intent.species]++
+		}
 	}
-	return added, transferred
+	return result
 }
 
 func inheritPlantColony(parent plantPopulation, species PlantSpecies) plantPopulation {
+	child, _ := inheritPlantColonyWithMutation(parent, species)
+	return child
+}
+
+func inheritPlantColonyWithMutation(parent plantPopulation, species PlantSpecies) (plantPopulation, bool) {
 	traits := plantTraits[species]
 	regrowthRate, spreadProbability, nutritionalYield := parent.regrowthRate, parent.spreadProbability, parent.nutritionalYield
 	if regrowthRate <= 0 {
@@ -619,8 +690,9 @@ func inheritPlantColony(parent plantPopulation, species PlantSpecies) plantPopul
 	}
 	if RandFloat64() < plantMutationProbability {
 		mutatePlantTrait(&child, species, RandIntn(3), (RandFloat64()*2-1)*plantMutationMagnitude)
+		return child, true
 	}
-	return child
+	return child, false
 }
 
 func mutatePlantTrait(colony *plantPopulation, species PlantSpecies, traitIndex int, relativeChange float64) {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 )
 
 // Collect creature ancestry stats
@@ -21,11 +22,33 @@ func printTickStats(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals
 	fmt.Printf("Avg Age: %.1f | Avg Health: %.1f | Avg Nutrition: %.1f\r\n",
 		float64(tickStats.TotalAge)/float64(avgDivisor), float64(tickStats.TotalHealth)/float64(avgDivisor), float64(tickStats.TotalNutrition)/float64(avgDivisor))
 	fmt.Printf("Creatures: %d | Carnivores: %d | Herbivores: %d\r\n", tickStats.TotalCreatures, tickStats.TotalCarnivores, tickStats.TotalHerbivores)
-	fmt.Printf("Vegetation | Grass: %.2f | Clover: %.2f | Bramble: %.2f | Capacity: %.2f\r\n",
-		tickStats.PlantBiomass[PlantGrass], tickStats.PlantBiomass[PlantClover], tickStats.PlantBiomass[PlantBramble], tickStats.PlantCapacity)
+	fmt.Print(formatPlantStats(tickStats))
 	if carnivoreTotals != nil {
 		fmt.Printf("Carnivore Totals | Eats: %d | Kills: %d | Clones: %d | Moves: %d | Fights: %d | Sleeps: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d\r\n", carnivoreTotals.Eats, carnivoreTotals.Kills, carnivoreTotals.Clones, carnivoreTotals.Moves, carnivoreTotals.Fights, carnivoreTotals.Sleeps, carnivoreTotals.AgeDeaths, carnivoreTotals.StarvationDeaths, carnivoreTotals.FightDeaths)
 	}
+}
+
+func formatPlantStats(stats *TickStats) string {
+	names := [plantSpeciesCount]string{"Grass", "Clover", "Bramble"}
+	var output strings.Builder
+	fmt.Fprintf(&output, "Vegetation | Capacity: %.2f\r\n", stats.PlantCapacity)
+	for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
+		trait := stats.PlantTraits[species]
+		fmt.Fprintf(&output,
+			"%s: %.2f (%d cells) | established %d | mutations %d | transferred %.2f | consumed %.2f | regrowth %.6f | spread %.6f | yield %.3f\r\n",
+			names[species], stats.PlantBiomass[species], stats.PlantOccupiedCells[species],
+			stats.PlantEstablishments[species], stats.PlantMutations[species],
+			stats.BiomassTransferred[species], stats.PlantBiomassConsumed[species],
+			trait.RegrowthRate, trait.SpreadProbability, trait.NutritionalYield)
+	}
+	fmt.Fprintf(&output,
+		"Cumulative establishments: grass %d, clover %d, bramble %d | mutations: grass %d, clover %d, bramble %d | growth %.2f | transferred %.2f | consumed %.2f\r\n",
+		stats.PlantCumulative.Establishments[PlantGrass], stats.PlantCumulative.Establishments[PlantClover], stats.PlantCumulative.Establishments[PlantBramble],
+		stats.PlantCumulative.Mutations[PlantGrass], stats.PlantCumulative.Mutations[PlantClover], stats.PlantCumulative.Mutations[PlantBramble],
+		stats.PlantCumulative.BiomassAdded,
+		stats.PlantCumulative.BiomassTransferred[PlantGrass]+stats.PlantCumulative.BiomassTransferred[PlantClover]+stats.PlantCumulative.BiomassTransferred[PlantBramble],
+		stats.PlantCumulative.BiomassConsumed[PlantGrass]+stats.PlantCumulative.BiomassConsumed[PlantClover]+stats.PlantCumulative.BiomassConsumed[PlantBramble])
+	return output.String()
 }
 
 func printAncestryStats(ancestryStats *[]AncestryStats) {

@@ -749,6 +749,7 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 
 	remaining := 5.0
 	consumed := 0.0
+	var consumedBySpecies [plantSpeciesCount]float64
 	nutritionGain := 0.0
 	for _, index := range order {
 		population := &location.plants[index]
@@ -761,6 +762,7 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 			*population = plantPopulation{}
 		}
 		consumed += amount
+		consumedBySpecies[index] += amount
 		remaining -= amount
 		nutritionGain += amount * plantNutritionalYield(location, PlantSpecies(index))
 		if remaining <= 0 {
@@ -771,6 +773,9 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 	applyPlantNutrition(c, nutritionGain)
 	if tickStats != nil {
 		tickStats.BiomassConsumed += consumed
+		for species, amount := range consumedBySpecies {
+			tickStats.PlantBiomassConsumed[species] += amount
+		}
 	}
 }
 
