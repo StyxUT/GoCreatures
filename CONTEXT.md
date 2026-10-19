@@ -39,3 +39,13 @@ transition from starvation or fighting; each death is credited once.
 **Carnivore totals**:
 Cumulative action and death counts for carnivores across ticks, separate from
 the final population snapshot in tick statistics.
+
+## Vegetation display
+
+Each map cell occupies three terminal columns in stable grass, clover, bramble
+order. Grass uses olive vertical strokes, clover teal stipple, and bramble muted
+purple crosshatch. Empty positions use dark soil; positive biomass uses sparse
+(1–9%), medium (10–39%), rich (40–69%) and dense (70–100%) texture/background
+bands. Creature glyphs cover the corresponding foreground texture while its
+species-specific background remains visible. The legend documents this overlay
+limitation. Rendering is deterministic and uses no simulation randomness.

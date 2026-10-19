@@ -408,53 +408,39 @@ func simulateTick(env [][]environment, creatureFac func(*Creature) *Creature, ti
 }
 
 func printMap(env [][]environment) {
+	fmt.Print(renderMap(env))
+}
+
+func renderMap(env [][]environment) string {
 	var buf bytes.Buffer
+	const reset = "\033[0m"
 	const darkRedAccent = "\033[38;5;88m"
 	buf.WriteString("\033[H\033[2J")
 	for i := range env {
 		for j := range env[i] {
 			cell := env[i][j]
-			bg := plantBiomassToColor(plantBiomassAvailable(&cell), cell.capacity)
 			creatures := cell.creatureList
-			count := len(creatures)
-
-			if cellHasCarnivore(creatures) {
-				switch {
-				case count == 1:
-					c := creatures[0]
-					fmt.Fprintf(&buf, "%s%s[\033[0m%s%s%c\033[0m%s%s]\033[0m", bg, darkRedAccent, bg, c.colorCode, c.char, bg, darkRedAccent)
-				case count > 1:
-					marker := min(count, 9)
-					fmt.Fprintf(&buf, "%s%s[%d]\033[0m", bg, darkRedAccent, marker)
-				}
-				continue
-			}
-
-			switch {
-			case count == 0:
-				buf.WriteString(bg + "   " + "\033[0m")
-			case count == 1:
-				c := creatures[0]
-				fmt.Fprintf(&buf, "%s %s%c \033[0m", bg, c.colorCode, c.char)
-			case count <= 3:
+			for position := 0; position < int(plantSpeciesCount); position++ {
+				plant := cell.plants[position]
+				bg, texture := plantTexture(PlantSpecies(position), plant.biomass, cell.capacity)
 				buf.WriteString(bg)
-				for k := range count {
-					c := creatures[k]
-					fmt.Fprintf(&buf, "%s%c", c.colorCode, c.char)
+				if position < len(creatures) && creatures[position] != nil {
+					creature := creatures[position]
+					if creature.isCarnivore() {
+						fmt.Fprintf(&buf, "%s%c", darkRedAccent, creature.char)
+					} else {
+						fmt.Fprintf(&buf, "%s%c", creature.colorCode, creature.char)
+					}
+				} else {
+					buf.WriteRune(texture)
 				}
-				for k := count; k < 3; k++ {
-					buf.WriteByte(' ')
-				}
-				buf.WriteString("\033[0m")
-			default:
-				first := creatures[0]
-				remaining := count - 1
-				fmt.Fprintf(&buf, "%s%s%c+%d\033[0m", bg, first.colorCode, first.char, remaining)
+				buf.WriteString(reset)
 			}
 		}
 		buf.WriteString("\n\r")
 	}
-	fmt.Print(buf.String())
+	buf.WriteString("Grass |I  Clover *o@  Bramble :xX#  (soil .; sparse 1-9%, medium 10-39%, rich 40-69%, dense 70-100%; creature glyphs cover texture)\n")
+	return buf.String()
 }
 
 func cellHasCarnivore(creatures []*Creature) bool {

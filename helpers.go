@@ -140,6 +140,38 @@ func plantBiomassToColor(biomass, capacity float64) string {
 	}
 }
 
+// plantTexture assigns a fixed three-column position and species-specific
+// foreground/background cues. It depends only on the cell snapshot, not RNG.
+func plantTexture(species PlantSpecies, biomass, capacity float64) (string, rune) {
+	if biomass <= 0 || capacity <= 0 {
+		return "\033[48;5;94m", '.'
+	}
+	density := biomass / capacity
+	shade := 0
+	switch {
+	case density >= 0.7:
+		shade = 3
+	case density >= 0.4:
+		shade = 2
+	case density >= 0.1:
+		shade = 1
+	}
+	backgrounds := [plantSpeciesCount][4]int{
+		{100, 64, 28, 34}, // olive grass
+		{108, 30, 24, 23}, // teal clover
+		{97, 96, 54, 53},  // muted purple bramble
+	}
+	textures := [plantSpeciesCount][4]rune{
+		{'.', '|', 'I', 'H'},
+		{'.', '*', 'o', '@'},
+		{':', 'x', 'X', '#'},
+	}
+	if species >= plantSpeciesCount {
+		return "\033[48;5;94m", '.'
+	}
+	return fmt.Sprintf("\033[48;5;%dm", backgrounds[species][shade]), textures[species][shade]
+}
+
 // Helper function to flatten the creature list
 func flattenCreatureList(env [][]environment) []*Creature {
 	var all []*Creature
