@@ -230,7 +230,11 @@ func main() {
 			printAncestryStats(&ancestryStats)
 			fmt.Print("\r\nPress <space> to pause or 'e' to exit")
 			fmt.Printf("\r\nUp/Down arrows adjust speed (%dms/tick)", currentTickInterval()/time.Millisecond)
-			fmt.Print("\r\nPress 'c' to spawn Carnivore, 'h' to spawn Herbivore")
+			width, _, err := term.GetSize(int(os.Stdout.Fd()))
+			if err != nil {
+				width = 81
+			}
+			fmt.Printf("\r\n%s", formatSpawnControlLine(width))
 
 			if len(ancestryStats) <= 1 {
 				PrintNewestClones(env)
@@ -550,7 +554,6 @@ func renderMap(env [][]environment) string {
 		}
 		buf.WriteString("\n\r")
 	}
-	buf.WriteString("Grass |I  Clover *o@  Bramble :xX#  (soil blank; sparse 1-9%, medium 10-39%, rich 40-69%, dense 70-100%; creature glyphs cover texture)\n")
 	return buf.String()
 }
 

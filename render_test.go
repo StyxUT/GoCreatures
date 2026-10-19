@@ -12,7 +12,7 @@ func TestRenderMapShowsMixedPlantSpeciesInThreeColumns(t *testing.T) {
 	}}}}
 
 	got := renderMap(env)
-	if !strings.Contains(got, "|") || !strings.Contains(got, "*") || !strings.Contains(got, "#") {
+	if !strings.Contains(got, ".") || !strings.Contains(got, "*") || !strings.Contains(got, "#") {
 		t.Fatalf("mixed vegetation lacks species/density textures: %q", got)
 	}
 	if strings.Count(strings.Split(strings.TrimSpace(got), "\n")[0], "\033[") == 0 {

@@ -16,11 +16,8 @@ func collectAncestryStats(env [][]environment, ancestryStats *[]AncestryStats) {
 }
 
 func printTickStats(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals) {
-	avgDivisor := max(tickStats.TotalCreatures, 1)
 	fmt.Printf("Tick: %d | TotalDeaths: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d \n\rBiomassAdded: %.2f | BiomassTransferred: %.2f | BiomassConsumed: %.2f | Clones: %d | Eats: %d | Moves: %d | Fights: %d | Sleeps: %d\r\n",
 		tickStats.Tick, tickStats.TotalDeaths, tickStats.AgeDeaths, tickStats.StarvationDeaths, tickStats.FightDeaths, tickStats.BiomassAdded, tickStats.BiomassTransferred[PlantGrass]+tickStats.BiomassTransferred[PlantClover]+tickStats.BiomassTransferred[PlantBramble], tickStats.BiomassConsumed, tickStats.Clones, tickStats.Eats, tickStats.Moves, tickStats.Fights, tickStats.Sleeps)
-	fmt.Printf("Avg Age: %.1f | Avg Health: %.1f | Avg Nutrition: %.1f\r\n",
-		float64(tickStats.TotalAge)/float64(avgDivisor), float64(tickStats.TotalHealth)/float64(avgDivisor), float64(tickStats.TotalNutrition)/float64(avgDivisor))
 	fmt.Printf("Creatures: %d | Carnivores: %d | Herbivores: %d\r\n", tickStats.TotalCreatures, tickStats.TotalCarnivores, tickStats.TotalHerbivores)
 	fmt.Print(formatPlantStats(tickStats))
 	if carnivoreTotals != nil {
@@ -28,10 +25,24 @@ func printTickStats(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals
 	}
 }
 
+func formatSpawnControlLine(width int) string {
+	const (
+		controlHelp = "Press 'c' to spawn Carnivore, 'h' to spawn Herbivore"
+		compactHelp = "Press 'c' spawn Carnivore, 'h' spawn Herbivore"
+		legend      = "Grass |I Clover *o@ Bramble :xX#"
+	)
+	if width <= 0 {
+		width = 81
+	}
+	if len(controlHelp)+len(legend) > width {
+		return compactHelp + strings.Repeat(" ", max(width-len(compactHelp)-len(legend), 1)) + legend
+	}
+	return controlHelp + strings.Repeat(" ", width-len(controlHelp)-len(legend)) + legend
+}
+
 func formatPlantStats(stats *TickStats) string {
 	names := [plantSpeciesCount]string{"Grass", "Clover", "Bramble"}
 	var output strings.Builder
-	fmt.Fprintf(&output, "Vegetation | Capacity: %.2f\r\n", stats.PlantCapacity)
 	for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
 		trait := stats.PlantTraits[species]
 		if species > 0 {

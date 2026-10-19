@@ -122,13 +122,44 @@ func TestPlantReportUsesFewerRowsWithoutCombiningSpeciesData(t *testing.T) {
 	}
 	output := formatPlantStats(&stats)
 	lines := strings.Split(strings.TrimSuffix(output, "\r\n"), "\r\n")
-	if len(lines) != 3 {
-		t.Fatalf("plant report has %d rows, want 3: %q", len(lines), output)
+	if len(lines) != 2 {
+		t.Fatalf("plant report has %d rows, want 2 after removing capacity: %q", len(lines), output)
 	}
 	for _, want := range []string{"Grass: 42.00", "Clover: 25.00", "Bramble: 10.00"} {
-		if !strings.Contains(lines[1], want) {
-			t.Errorf("compact species row missing %q: %q", want, lines[1])
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("compact species row missing %q: %q", want, lines[0])
 		}
+	}
+}
+
+func TestTickReportOmitsCapacityAndAverageRows(t *testing.T) {
+	output := captureStdout(t, func() {
+		printTickStats(&TickStats{TotalCreatures: 1, TotalHealth: 50, TotalAge: 25}, nil)
+	})
+	for _, removed := range []string{"Vegetation | Capacity:", "Avg Age:", "Avg Health:", "Avg Nutrition:"} {
+		if strings.Contains(output, removed) {
+			t.Errorf("tick report still contains %q: %s", removed, output)
+		}
+	}
+}
+
+func TestSpawnControlLineRightAlignsVegetationLegend(t *testing.T) {
+	left := "Press 'c' to spawn Carnivore, 'h' to spawn Herbivore"
+	legend := "Grass |I Clover *o@ Bramble :xX#"
+	for _, width := range []int{81, 100} {
+		line := formatSpawnControlLine(width)
+		if !strings.HasSuffix(line, legend) {
+			t.Errorf("control line at width %d does not end with legend %q: %q", width, legend, line)
+		}
+		if len(line) != width {
+			t.Errorf("control line width = %d, want %d: %q", len(line), width, line)
+		}
+		if width == 100 && !strings.HasPrefix(line, left) {
+			t.Errorf("wide control line does not preserve help text %q: %q", left, line)
+		}
+	}
+	if !strings.HasPrefix(formatSpawnControlLine(81), "Press 'c' spawn Carnivore, 'h' spawn Herbivore") {
+		t.Fatal("narrow control line did not use compact but legible action labels")
 	}
 }
 
