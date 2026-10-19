@@ -76,7 +76,7 @@ so choosing to flee does not guarantee evading an attack already in range.
 ## Plant ecology
 
 Each cell has a shared capacity of 100 biomass units. Founding patches use up to
-`2 * max(1, ceil(cellCount/300))` centers per species, with 20 biomass at a center
+`6 * max(1, ceil(cellCount/300))` centers per species, with 20 biomass at a center
 and 5 in each in-bounds cardinal halo cell; overlapping requests are scaled to
 fit capacity. Each tick snapshots vegetation, accumulates fractional growth
 from existing colonies at grass/clover/bramble rates 0.08/0.04/0.02 scaled by

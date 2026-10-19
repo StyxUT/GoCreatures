@@ -368,7 +368,7 @@ func seedPlants(env [][]environment) {
 		return
 	}
 	cellCount := rows * cols
-	centers := 2 * max(1, (cellCount+299)/300)
+	centers := 6 * max(1, (cellCount+299)/300)
 	requested := make([][][plantSpeciesCount]float64, rows)
 	for y := range requested {
 		requested[y] = make([][plantSpeciesCount]float64, len(env[y]))
