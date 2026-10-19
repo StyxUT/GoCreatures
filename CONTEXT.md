@@ -44,7 +44,8 @@ the final population snapshot in tick statistics.
 
 Each map cell occupies three terminal columns in stable grass, clover, bramble
 order. Grass uses olive vertical strokes, clover teal stipple, and bramble muted
-purple crosshatch. Empty positions use dark soil; positive biomass uses sparse
+purple crosshatch. Empty positions use plain dark soil with no foreground
+texture; positive biomass uses sparse
 (1–9%), medium (10–39%), rich (40–69%) and dense (70–100%) texture/background
 bands. Creature glyphs cover the corresponding foreground texture while its
 species-specific background remains visible. The legend documents this overlay
@@ -52,10 +53,30 @@ limitation. Single carnivores use brackets; multiple carnivores and crowded
 herbivores retain a compact count cue within the three-column cell. Rendering is
 deterministic and uses no simulation randomness.
 
+## Starting creatures and predator avoidance
+
+Each cell has a 4.5% initial creature spawn probability (half the previous 9%).
+Of those spawns, 5% are carnivores and 95% herbivores, halving the expected
+starting population of each diet. Manual spawns still create one creature.
+
+A mobile herbivore prioritizes escape over fighting, cloning, feeding and
+resting when a neighboring step increases its distance from the nearest known
+living carnivore. Known threats come from the current cell (even at zero vision)
+and the cells in its normal observations; unseen or dead predators do not affect
+the decision. All eight in-bounds neighboring steps are considered, using
+Chebyshev distance to match diagonal movement and adjacent predator attacks.
+Equal-best steps use stable creature-identity tie-breaking, not random draws or
+unseen cell contents. Immobile herbivores keep their normal non-movement actions.
+
+If no strictly safer step exists, normal actions remain available, but movement
+closer to a known predator or into its cell becomes resting instead. Escape is
+an ordinary move intent: existing fight-before-movement resolution still applies,
+so choosing to flee does not guarantee evading an attack already in range.
+
 ## Plant ecology
 
 Each cell has a shared capacity of 100 biomass units. Founding patches use up to
-`max(1, ceil(cellCount/300))` centers per species, with 20 biomass at a center
+`2 * max(1, ceil(cellCount/300))` centers per species, with 20 biomass at a center
 and 5 in each in-bounds cardinal halo cell; overlapping requests are scaled to
 fit capacity. Each tick snapshots vegetation, accumulates fractional growth
 from existing colonies at grass/clover/bramble rates 0.08/0.04/0.02 scaled by

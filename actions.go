@@ -41,6 +41,24 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 		return decideCarnivoreAction(c, env, location, pctHealth, pctAge, pctNutrition, canMove)
 	}
 
+	var threats []ObservedLocation
+	if canMove {
+		threats = observedCarnivoreLocations(c, &env[c.Y][c.X])
+		if destination, ok := selectHerbivoreEscape(c, env, threats); ok {
+			return ActionIntent{Creature: c, Type: "move", TargetX: destination.X, TargetY: destination.Y}
+		}
+	}
+	intent := decideHerbivoreAction(c, env, location, pctHealth, pctAge, pctNutrition, canMove)
+	if intent.Type == "move" && len(threats) > 0 {
+		distance := nearestCarnivoreDistance(intent.TargetX, intent.TargetY, threats)
+		if distance == 0 || distance < nearestCarnivoreDistance(c.X, c.Y, threats) {
+			return ActionIntent{Creature: c, Type: "sleep"}
+		}
+	}
+	return intent
+}
+
+func decideHerbivoreAction(c *Creature, env [][]environment, location environment, pctHealth, pctAge, pctNutrition float64, canMove bool) ActionIntent {
 	modAggression := c.aggression
 	var targetCreature *Creature
 	// Fight if sharing location with non-relative, healthy, and aggressive

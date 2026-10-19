@@ -337,7 +337,7 @@ func initializeMap(rows, cols int, createCreature *creatureFactory) [][]environm
 		matrix[i] = make([]environment, cols)
 		for j := range matrix[i] {
 			matrix[i][j].capacity = plantCellCapacity
-			if RandIntn(1000) >= 90 { // 9.0% initial spawn rate
+			if RandIntn(1000) >= 45 { // 4.5% initial spawn rate; halve both diets
 				continue
 			}
 
@@ -368,7 +368,7 @@ func seedPlants(env [][]environment) {
 		return
 	}
 	cellCount := rows * cols
-	centers := max(1, (cellCount+299)/300)
+	centers := 2 * max(1, (cellCount+299)/300)
 	requested := make([][][plantSpeciesCount]float64, rows)
 	for y := range requested {
 		requested[y] = make([][plantSpeciesCount]float64, len(env[y]))
@@ -550,7 +550,7 @@ func renderMap(env [][]environment) string {
 		}
 		buf.WriteString("\n\r")
 	}
-	buf.WriteString("Grass |I  Clover *o@  Bramble :xX#  (soil .; sparse 1-9%, medium 10-39%, rich 40-69%, dense 70-100%; creature glyphs cover texture)\n")
+	buf.WriteString("Grass |I  Clover *o@  Bramble :xX#  (soil blank; sparse 1-9%, medium 10-39%, rich 40-69%, dense 70-100%; creature glyphs cover texture)\n")
 	return buf.String()
 }
 

@@ -81,7 +81,7 @@ func TestPlantTextureDensityBandsAndSpeciesAreDistinct(t *testing.T) {
 
 func TestRenderMapDistinguishesEverySpeciesCombination(t *testing.T) {
 	ansi := regexp.MustCompile("\\x1b\\[[0-9;]*m")
-	for combination := 1; combination < 1<<plantSpeciesCount; combination++ {
+	for combination := 0; combination < 1<<plantSpeciesCount; combination++ {
 		cell := environment{capacity: plantCellCapacity}
 		var want strings.Builder
 		for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
@@ -90,7 +90,7 @@ func TestRenderMapDistinguishesEverySpeciesCombination(t *testing.T) {
 				_, texture := plantTexture(species, 25, plantCellCapacity)
 				want.WriteRune(texture)
 			} else {
-				want.WriteByte('.')
+				want.WriteByte(' ')
 			}
 		}
 		output := renderMap([][]environment{{cell}})

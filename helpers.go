@@ -156,7 +156,7 @@ var plantBackgrounds = [plantSpeciesCount][4]string{
 
 func plantTexture(species PlantSpecies, biomass, capacity float64) (string, rune) {
 	if biomass <= 0 || capacity <= 0 {
-		return "\033[48;5;94m", '.'
+		return "\033[48;5;94m", ' '
 	}
 	density := biomass / capacity
 	shade := 0
@@ -169,7 +169,7 @@ func plantTexture(species PlantSpecies, biomass, capacity float64) (string, rune
 		shade = 1
 	}
 	if species >= plantSpeciesCount {
-		return "\033[48;5;94m", '.'
+		return "\033[48;5;94m", ' '
 	}
 	return plantBackgrounds[species][shade], plantTextures[species][shade]
 }
