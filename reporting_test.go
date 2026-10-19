@@ -111,6 +111,27 @@ func TestPrintTickStatsReportsEcologySnapshotAndCumulativeEvents(t *testing.T) {
 	}
 }
 
+func TestPlantReportUsesFewerRowsWithoutCombiningSpeciesData(t *testing.T) {
+	stats := TickStats{
+		PlantBiomass: [plantSpeciesCount]float64{42, 25, 10},
+		PlantTraits: [plantSpeciesCount]PlantTraitSummary{
+			{RegrowthRate: 0.08, SpreadProbability: 0.02, NutritionalYield: 15},
+			{RegrowthRate: 0.04, SpreadProbability: 0.01, NutritionalYield: 20},
+			{RegrowthRate: 0.02, SpreadProbability: 0.005, NutritionalYield: 10},
+		},
+	}
+	output := formatPlantStats(&stats)
+	lines := strings.Split(strings.TrimSuffix(output, "\r\n"), "\r\n")
+	if len(lines) != 3 {
+		t.Fatalf("plant report has %d rows, want 3: %q", len(lines), output)
+	}
+	for _, want := range []string{"Grass: 42.00", "Clover: 25.00", "Bramble: 10.00"} {
+		if !strings.Contains(lines[1], want) {
+			t.Errorf("compact species row missing %q: %q", want, lines[1])
+		}
+	}
+}
+
 func TestSimulationPlantReportsAreFinalSnapshotsWithCumulativeEvents(t *testing.T) {
 	ResetRand(304)
 	env := [][]environment{{

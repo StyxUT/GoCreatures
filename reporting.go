@@ -34,13 +34,17 @@ func formatPlantStats(stats *TickStats) string {
 	fmt.Fprintf(&output, "Vegetation | Capacity: %.2f\r\n", stats.PlantCapacity)
 	for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
 		trait := stats.PlantTraits[species]
+		if species > 0 {
+			output.WriteString(" | ")
+		}
 		fmt.Fprintf(&output,
-			"%s: %.2f (%d cells) | established %d | mutations %d | transferred %.2f | consumed %.2f | regrowth %.6f | spread %.6f | yield %.3f\r\n",
+			"%s: %.2f (%d cells) | established %d | mutations %d | transferred %.2f | consumed %.2f | regrowth %.6f | spread %.6f | yield %.3f",
 			names[species], stats.PlantBiomass[species], stats.PlantOccupiedCells[species],
 			stats.PlantEstablishments[species], stats.PlantMutations[species],
 			stats.BiomassTransferred[species], stats.PlantBiomassConsumed[species],
 			trait.RegrowthRate, trait.SpreadProbability, trait.NutritionalYield)
 	}
+	output.WriteString("\r\n")
 	fmt.Fprintf(&output,
 		"Cumulative establishments: grass %d, clover %d, bramble %d | mutations: grass %d, clover %d, bramble %d | growth %.2f | transferred %.2f | consumed %.2f\r\n",
 		stats.PlantCumulative.Establishments[PlantGrass], stats.PlantCumulative.Establishments[PlantClover], stats.PlantCumulative.Establishments[PlantBramble],
