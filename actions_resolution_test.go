@@ -4,6 +4,7 @@ package main
 // These tests assert movement direction and fight triggering remain stable across runs.
 
 import (
+	"math"
 	"testing"
 )
 
@@ -90,14 +91,14 @@ func TestResolveClone(t *testing.T) {
 	if clone.health != 30 {
 		t.Errorf("expected clone health 30, got %d", clone.health)
 	}
-	if clone.nutrition != 30 {
-		t.Errorf("expected clone nutrition 30, got %d", clone.nutrition)
+	if clone.nutrition != 20 {
+		t.Errorf("expected offspring energy budget 20, got %d", clone.nutrition)
 	}
 	if parent.health != 30 {
 		t.Errorf("expected parent health 30, got %d", parent.health)
 	}
-	if parent.nutrition != 60 {
-		t.Errorf("expected parent nutrition 60, got %d", parent.nutrition)
+	if parent.nutrition != 81 {
+		t.Errorf("expected parent to retain 81 nutrition after energy transfer, got %d", parent.nutrition)
 	}
 	if parent.immobileTicks != cloneBaseImmobileTicks {
 		t.Errorf("expected parent immobile ticks %d, got %d", cloneBaseImmobileTicks, parent.immobileTicks)
@@ -107,6 +108,108 @@ func TestResolveClone(t *testing.T) {
 	}
 	if clone.X != parent.X || clone.Y != parent.Y {
 		t.Errorf("expected clone to remain in birth cell, got (%d,%d) parent (%d,%d)", clone.X, clone.Y, parent.X, parent.Y)
+	}
+}
+
+func TestCloneTransfersARealEnergyBudgetAndStartsCooldown(t *testing.T) {
+	parent := &Creature{X: 0, Y: 0, health: 100, maxHealth: 100, nutrition: 80, maxNutrition: 100, generation: 1, ancestor: &Creature{colorCode: "x"}}
+	env := [][]environment{{{creatureList: []*Creature{parent}}}}
+	before := parent.nutrition
+	resolveClone(ActionIntent{Creature: parent, Type: "clone"}, env, CreatureFactory().create)
+	child := env[0][0].creatureList[1]
+	if parent.nutrition+child.nutrition != before {
+		t.Fatalf("parent/offpsring stored energy = %d+%d, want conserved total %d", parent.nutrition, child.nutrition, before)
+	}
+	if child.nutrition <= 0 || parent.cloneCooldown == 0 || child.cloneCooldown == 0 {
+		t.Fatalf("clone energy/cooldown not assigned: parent=%+v child=%+v", parent, child)
+	}
+}
+
+func TestPredatorKillCreatesFiniteCarcassInsteadOfImmediateReward(t *testing.T) {
+	predator := &Creature{health: 300, maxHealth: 300, nutrition: 10, maxNutrition: 1000, diet: DietCarnivore}
+	prey := &Creature{health: 1, maxHealth: 100, nutrition: 20, maxNutrition: 400, diet: DietHerbivore}
+	env := [][]environment{{{creatureList: []*Creature{predator, prey}}}}
+	stats := &TickStats{}
+	resolveFight(ActionIntent{Creature: predator, TargetCreature: prey}, stats, nil, env)
+	if predator.nutrition != 5 {
+		t.Fatalf("kill awarded immediate nutrition beyond fight costs: got %d, want 5", predator.nutrition)
+	}
+	if got := env[0][0].carcass.energy; got <= 0 || got > float64(prey.maxNutrition)*carcassEnergyFraction {
+		t.Fatalf("carcass energy %.2f is not finite prey-derived energy", got)
+	}
+	for range 5 {
+		resolveEat(ActionIntent{Creature: predator, Type: "eat"}, env, stats)
+	}
+	if env[0][0].carcass.energy < 0 || predator.nutrition > predator.maxNutrition || predator.handlingTicks == 0 {
+		t.Fatalf("repeated feeding duplicated energy: carcass %.2f, predator nutrition %d", env[0][0].carcass.energy, predator.nutrition)
+	}
+}
+
+func TestCarcassDecaysAndHandlingTimeBlocksConsecutiveMeals(t *testing.T) {
+	predator := &Creature{X: 0, Y: 0, health: 100, maxHealth: 100, nutrition: 0, maxNutrition: 1000, age: 1, maxAge: 100, diet: DietCarnivore}
+	env := [][]environment{{{carcass: carcassState{energy: 100}, creatureList: []*Creature{predator}}}}
+	resolveEat(ActionIntent{Creature: predator, Type: "eat"}, env, &TickStats{})
+	remaining := env[0][0].carcass.energy
+	if remaining != 0 || predator.nutrition != 100 || predator.handlingTicks != carnivoreHandlingDuration+1 {
+		t.Fatalf("first meal energy state: carcass %.2f, nutrition %d, handling %d", remaining, predator.nutrition, predator.handlingTicks)
+	}
+	resolveEat(ActionIntent{Creature: predator, Type: "eat"}, env, &TickStats{})
+	if predator.nutrition != 100 {
+		t.Fatalf("handling time allowed duplicate meal, nutrition is %d", predator.nutrition)
+	}
+	env[0][0].carcass.energy = 100
+	processEnvironment(env, &TickStats{}, nil)
+	if math.Abs(env[0][0].carcass.energy-95) > 1e-9 {
+		t.Fatalf("carcass decay = %.2f, want 95", env[0][0].carcass.energy)
+	}
+}
+
+func TestCarnivoreHandlingBlocksThreeFullFollowingTicks(t *testing.T) {
+	predator := &Creature{X: 0, Y: 0, health: 100, maxHealth: 100, nutrition: 0, maxNutrition: 1000, age: 1, maxAge: 100, diet: DietCarnivore}
+	env := [][]environment{{{carcass: carcassState{energy: 1000}, creatureList: []*Creature{predator}}}}
+	resolveEat(ActionIntent{Creature: predator, Type: "eat"}, env, &TickStats{})
+	stats := &TickStats{}
+	for tick := 1; tick <= carnivoreHandlingDuration; tick++ {
+		simulateTick(env, func(*Creature) *Creature { return nil }, stats, nil)
+		if stats.Eats != 0 || stats.Sleeps == 0 {
+			t.Fatalf("handling tick %d did not suppress feeding: eats=%d sleeps=%d", tick, stats.Eats, stats.Sleeps)
+		}
+	}
+	simulateTick(env, func(*Creature) *Creature { return nil }, stats, nil)
+	if stats.Eats != 1 {
+		t.Fatalf("carnivore did not resume feeding after handling duration: %+v", stats)
+	}
+}
+
+func TestCarnivoreForagesToObservedCarcassAndConsumesItOverActions(t *testing.T) {
+	predator := &Creature{X: 4, Y: 4, health: 100, maxHealth: 100, nutrition: 20, maxNutrition: 100, age: 10, maxAge: 100, vision: 81, diet: DietCarnivore}
+	env := make([][]environment, 9)
+	for y := range env {
+		env[y] = make([]environment, 9)
+	}
+	env[4][4].creatureList = []*Creature{predator}
+	env[4][6].carcass.energy = 50
+	SpiralLook2D_N(env, predator)
+	if found, ok := selectCarcassLocation(predator); !ok || found.X != 6 || found.Y != 4 {
+		t.Fatalf("carcass not observed for foraging: found=%+v ok=%v observed=%+v", found, ok, predator.observed)
+	}
+	intent := predator.decideAction(env)
+	if intent.Type != "move" || intent.TargetX != 5 || intent.TargetY != 4 {
+		t.Fatalf("hungry carnivore did not move toward observed carcass: %+v", intent)
+	}
+	resolveMove(intent, env)
+	intent = predator.decideAction(env)
+	if intent.Type != "move" || intent.TargetX != 6 || intent.TargetY != 4 {
+		t.Fatalf("carnivore did not continue toward carcass: %+v", intent)
+	}
+	resolveMove(intent, env)
+	intent = predator.decideAction(env)
+	if intent.Type != "eat" {
+		t.Fatalf("carnivore at carcass did not eat: %+v", intent)
+	}
+	resolveEat(intent, env, &TickStats{})
+	if predator.nutrition != 28 || env[4][6].carcass.energy != 40 {
+		t.Fatalf("carcass feeding did not transfer finite energy: nutrition %d, carcass %.2f", predator.nutrition, env[1][2].carcass.energy)
 	}
 }
 
@@ -129,7 +232,7 @@ func TestResolveFight(t *testing.T) {
 	}
 }
 
-func TestResolveFight_CarnivoreGainsNutritionOnKill(t *testing.T) {
+func TestResolveFight_KillDoesNotAwardNutritionBeforeCarcassFeeding(t *testing.T) {
 	attacker := &Creature{health: 500, maxHealth: 500, nutrition: 10, maxNutrition: 200, diet: DietCarnivore}
 	defender := &Creature{health: 5, maxHealth: 100, nutrition: 10, maxNutrition: 100, diet: DietHerbivore}
 	stats := &TickStats{}
@@ -139,20 +242,20 @@ func TestResolveFight_CarnivoreGainsNutritionOnKill(t *testing.T) {
 	if defender.health > 0 {
 		t.Fatalf("expected defender to die, got health %d", defender.health)
 	}
-	expected := 10 - 5 + carnivoreKillNutritionGain
+	expected := 10 - 5
 	if attacker.nutrition != expected {
 		t.Fatalf("expected attacker nutrition %d, got %d", expected, attacker.nutrition)
 	}
 }
 
-func TestResolveFight_CarnivoreGainRespectsMaxNutrition(t *testing.T) {
+func TestResolveFight_KillNutritionIsNotGrantedImmediately(t *testing.T) {
 	attacker := &Creature{health: 500, maxHealth: 500, nutrition: 95, maxNutrition: 100, diet: DietCarnivore}
 	defender := &Creature{health: 5, maxHealth: 100, nutrition: 10, maxNutrition: 100, diet: DietHerbivore}
 
 	resolveFight(ActionIntent{Creature: attacker, TargetCreature: defender}, &TickStats{}, nil)
 
-	if attacker.nutrition != 100 {
-		t.Fatalf("expected attacker nutrition capped at 100, got %d", attacker.nutrition)
+	if attacker.nutrition != 90 {
+		t.Fatalf("expected only fight cost before eating carcass, got %d", attacker.nutrition)
 	}
 }
 
@@ -371,7 +474,7 @@ func TestDecideAction_CarnivoreHighNutritionSleepsWithoutAdjacentPrey(t *testing
 		env[i] = make([]environment, 5)
 	}
 	hunter := &Creature{X: 2, Y: 2, health: 100, maxHealth: 100, nutrition: 90, maxNutrition: 100, vision: 20, diet: DietCarnivore, ancestor: &Creature{num: 1}}
-	distantHerbivore := &Creature{X: 4, Y: 4, health: 100, maxHealth: 100, diet: DietHerbivore, ancestor: &Creature{num: 2}}
+	distantHerbivore := &Creature{X: 4, Y: 4, health: 100, maxHealth: 60, diet: DietHerbivore, ancestor: &Creature{num: 2}}
 	env[2][2].creatureList = []*Creature{hunter}
 	env[4][4].creatureList = []*Creature{distantHerbivore}
 
@@ -388,7 +491,7 @@ func TestDecideAction_CarnivoreAdjacentHerbivoreAttacksImmediately(t *testing.T)
 		env[i] = make([]environment, 5)
 	}
 	hunter := &Creature{X: 2, Y: 2, health: 100, maxHealth: 100, nutrition: 50, maxNutrition: 100, vision: 8, diet: DietCarnivore, ancestor: &Creature{num: 1}}
-	adjacentHerbivore := &Creature{X: 3, Y: 2, health: 100, maxHealth: 100, diet: DietHerbivore, ancestor: &Creature{num: 2}}
+	adjacentHerbivore := &Creature{X: 3, Y: 2, health: 100, maxHealth: 60, diet: DietHerbivore, ancestor: &Creature{num: 2}}
 	env[2][2].creatureList = []*Creature{hunter}
 	env[2][3].creatureList = []*Creature{adjacentHerbivore}
 
@@ -402,20 +505,73 @@ func TestDecideAction_CarnivoreAdjacentHerbivoreAttacksImmediately(t *testing.T)
 	}
 }
 
-func TestDecideAction_CarnivoreCloneHasTopPriority(t *testing.T) {
+func TestDecideAction_CarnivoreDoesNotCloneAheadOfFeedingOrWithoutFood(t *testing.T) {
 	env := make([][]environment, 5)
 	for i := range env {
 		env[i] = make([]environment, 5)
 	}
 	hunter := &Creature{X: 2, Y: 2, health: 90, maxHealth: 100, nutrition: 90, maxNutrition: 100, age: 50, maxAge: 100, vision: 8, diet: DietCarnivore, ancestor: &Creature{num: 1}}
-	adjacentHerbivore := &Creature{X: 3, Y: 2, health: 100, maxHealth: 100, diet: DietHerbivore, ancestor: &Creature{num: 2}}
+	adjacentHerbivore := &Creature{X: 3, Y: 2, health: 100, maxHealth: 60, diet: DietHerbivore, ancestor: &Creature{num: 2}}
 	env[2][2].creatureList = []*Creature{hunter}
 	env[2][3].creatureList = []*Creature{adjacentHerbivore}
 
 	intent := hunter.decideAction(env)
 
-	if intent.Type != "clone" {
-		t.Fatalf("expected clone to have highest priority, got %s", intent.Type)
+	if intent.Type != "sleep" {
+		t.Fatalf("expected no reproduction in an unrewarding prey encounter, got %s", intent.Type)
+	}
+}
+
+func TestReproductionRequiresNutritionLocalFoodAndExpiredCooldown(t *testing.T) {
+	env := make([][]environment, 3)
+	for y := range env {
+		env[y] = make([]environment, 3)
+		for x := range env[y] {
+			env[y][x].capacity = plantCellCapacity
+		}
+	}
+	parent := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, nutrition: 80, maxNutrition: 100, age: 50, maxAge: 100, vision: 8}
+	env[1][1].creatureList = []*Creature{parent}
+	env[1][1].plants[PlantGrass].biomass = 50
+	if intent := parent.decideAction(env); intent.Type != "clone" {
+		t.Fatalf("fed creature with local food did not reproduce: %+v", intent)
+	}
+	parent.cloneCooldown = 1
+	if intent := parent.decideAction(env); intent.Type == "clone" {
+		t.Fatalf("creature reproduced during cooldown: %+v", intent)
+	}
+	parent.cloneCooldown = 0
+	env[1][1].plants[PlantGrass].biomass = 0
+	if intent := parent.decideAction(env); intent.Type == "clone" {
+		t.Fatalf("creature reproduced without observable food: %+v", intent)
+	}
+	parent.nutrition = 60
+	env[1][1].plants[PlantGrass].biomass = 50
+	if intent := parent.decideAction(env); intent.Type == "clone" {
+		t.Fatalf("energy-poor creature reproduced: %+v", intent)
+	}
+	parent.nutrition = 80
+	env[1][1].creatureList = append(env[1][1].creatureList, &Creature{diet: DietHerbivore, health: 100}, &Creature{diet: DietHerbivore, health: 100})
+	if intent := parent.decideAction(env); intent.Type == "clone" {
+		t.Fatalf("crowded food supply did not suppress reproduction: %+v", intent)
+	}
+}
+
+func TestReproductionCooldownBlocksConfiguredNumberOfTicks(t *testing.T) {
+	env := [][]environment{{{capacity: plantCellCapacity, plants: [plantSpeciesCount]plantPopulation{{biomass: 100, nutritionalYield: 15}}}}}
+	parent := &Creature{X: 0, Y: 0, health: 100, maxHealth: 100, nutrition: 100, maxNutrition: 100, age: 30, maxAge: 100, diet: DietHerbivore, ancestor: &Creature{num: 1}, cloneCooldown: herbivoreCloneCooldown + 1}
+	env[0][0].creatureList = []*Creature{parent}
+	stats := &TickStats{}
+	factory := CreatureFactory()
+	for tick := 1; tick <= herbivoreCloneCooldown; tick++ {
+		simulateTick(env, factory.create, stats, nil)
+		if stats.Clones != 0 {
+			t.Fatalf("reproduced on cooldown tick %d of %d", tick, herbivoreCloneCooldown)
+		}
+	}
+	simulateTick(env, factory.create, stats, nil)
+	if stats.Clones != 1 {
+		t.Fatalf("did not reproduce after cooldown expired: clones=%d cooldown=%d intent=%+v age=%d nutrition=%d plants=%.2f", stats.Clones, parent.cloneCooldown, parent.decideAction(env), parent.age, parent.nutrition, env[0][0].plants[PlantGrass].biomass)
 	}
 }
 
@@ -527,19 +683,20 @@ func TestCarnivoreWillFight_HealthExtremes(t *testing.T) {
 	}
 }
 
-func TestResolveFight_CarnivoreKillCountsAsEat(t *testing.T) {
+func TestResolveFight_CarnivoreKillCreatesCarcassNotMeal(t *testing.T) {
 	attacker := &Creature{health: 500, maxHealth: 500, nutrition: 10, maxNutrition: 200, diet: DietCarnivore}
 	defender := &Creature{health: 5, maxHealth: 100, nutrition: 10, maxNutrition: 100, diet: DietHerbivore}
+	env := [][]environment{{{creatureList: []*Creature{attacker, defender}}}}
 	tickStats := &TickStats{}
 	totals := &CarnivoreActionTotals{}
 
-	resolveFight(ActionIntent{Creature: attacker, TargetCreature: defender}, tickStats, totals)
+	resolveFight(ActionIntent{Creature: attacker, TargetCreature: defender}, tickStats, totals, env)
 
-	if tickStats.Eats != 1 {
-		t.Fatalf("expected tick eats to increment from carnivore feeding, got %d", tickStats.Eats)
+	if tickStats.Eats != 0 || tickStats.CarcassesCreated != 1 || tickStats.CarcassEnergyCreated != 50 {
+		t.Fatalf("kill event stats are not separated from feeding: %+v", tickStats)
 	}
-	if totals.Eats != 1 {
-		t.Fatalf("expected carnivore totals eats to increment, got %d", totals.Eats)
+	if totals.Eats != 0 {
+		t.Fatalf("kill should not count as meal, got %d eats", totals.Eats)
 	}
 	if totals.Kills != 1 {
 		t.Fatalf("expected carnivore totals kills to increment, got %d", totals.Kills)
@@ -849,8 +1006,8 @@ func TestResolveActions_TracksCarnivoreTotals(t *testing.T) {
 	if totals.Fights != 1 {
 		t.Fatalf("expected carnivore fights total 1, got %d", totals.Fights)
 	}
-	if totals.Eats != 1 {
-		t.Fatalf("expected carnivore eats total 1 from kill feeding, got %d", totals.Eats)
+	if totals.Eats != 0 {
+		t.Fatalf("kill should create carcass but not count a meal, got %d", totals.Eats)
 	}
 	if totals.Kills != 1 {
 		t.Fatalf("expected carnivore kills total 1, got %d", totals.Kills)
@@ -943,7 +1100,7 @@ func TestDecideAction_FightAggressionReductionSharedAncestor(t *testing.T) {
 func TestResolveCloneDeterministicMutation(t *testing.T) {
 	ResetRand(1)
 	ancestor := &Creature{num: 500}
-	parent := &Creature{X: 1, Y: 1, health: 60, maxHealth: 100, nutrition: 60, maxNutrition: 100, aggression: 20, vision: 2, generation: 3, ancestor: ancestor}
+	parent := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, nutrition: 80, maxNutrition: 100, aggression: 20, vision: 2, generation: 3, ancestor: ancestor}
 	env := make([][]environment, 3)
 	for i := range env {
 		env[i] = make([]environment, 3)
@@ -977,8 +1134,8 @@ func TestResolveCloneDeterministicMutation(t *testing.T) {
 	if parent.health >= 60 {
 		t.Errorf("expected parent health reduced below 60, got %d", parent.health)
 	}
-	if parent.nutrition != 36 {
-		t.Errorf("expected parent nutrition reduced to 36, got %d", parent.nutrition)
+	if parent.nutrition != 60 {
+		t.Errorf("expected parent nutrition 60 after 20%% transfer, got %d", parent.nutrition)
 	}
 	if parent.immobileTicks != cloneBaseImmobileTicks || clone.immobileTicks != cloneBaseImmobileTicks {
 		t.Errorf("expected both parent and clone immobile for %d ticks, got parent=%d clone=%d", cloneBaseImmobileTicks, parent.immobileTicks, clone.immobileTicks)
@@ -988,7 +1145,7 @@ func TestResolveCloneDeterministicMutation(t *testing.T) {
 	}
 }
 
-func TestResolveClone_ReducesParentNutritionByFortyPercent(t *testing.T) {
+func TestResolveCloneTransfersAnExplicitNutritionBudget(t *testing.T) {
 	parent := &Creature{X: 1, Y: 1, health: 100, maxHealth: 100, nutrition: 95, maxNutrition: 100, generation: 2, ancestor: &Creature{colorCode: "aaa"}}
 	env := make([][]environment, 3)
 	for i := range env {
@@ -998,8 +1155,8 @@ func TestResolveClone_ReducesParentNutritionByFortyPercent(t *testing.T) {
 
 	resolveClone(ActionIntent{Creature: parent, Type: "clone"}, env, CreatureFactory().create)
 
-	if parent.nutrition != 57 {
-		t.Fatalf("expected parent nutrition 57 after 40%% deduction, got %d", parent.nutrition)
+	if parent.nutrition != 75 {
+		t.Fatalf("expected parent nutrition 75 after transferring 20 energy, got %d", parent.nutrition)
 	}
 	if parent.immobileTicks != cloneBaseImmobileTicks {
 		t.Fatalf("expected parent immobile for %d ticks, got %d", cloneBaseImmobileTicks, parent.immobileTicks)
@@ -1164,8 +1321,8 @@ func TestResolveClone_SetsImmobileTicksOnParentAndClone(t *testing.T) {
 	if parent.health >= 100 {
 		t.Fatalf("expected parent health reduction, got %d", parent.health)
 	}
-	if parent.nutrition != 48 {
-		t.Fatalf("expected parent nutrition reduction, got %d", parent.nutrition)
+	if parent.nutrition != 60 {
+		t.Fatalf("expected parent nutrition 60 after transferring 20 energy, got %d", parent.nutrition)
 	}
 	if parent.immobileTicks != cloneBaseImmobileTicks || clone.immobileTicks != cloneBaseImmobileTicks {
 		t.Fatalf("expected immobile ticks of %d, got parent=%d clone=%d", cloneBaseImmobileTicks, parent.immobileTicks, clone.immobileTicks)

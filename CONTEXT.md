@@ -73,6 +73,46 @@ closer to a known predator or into its cell becomes resting instead. Escape is
 an ordinary move intent: existing fight-before-movement resolution still applies,
 so choosing to flee does not guarantee evading an attack already in range.
 
+## Food-limited reproduction and predator meals
+
+Reproduction requires health above 70%, age between 20% and 90% of maximum,
+nutrition of at least 70% of maximum, and no active cooldown. Establishing a clone
+transfers 20% of the parent's maximum nutrition to the offspring; both parent and
+offspring receive a 20-tick herbivore or 40-tick carnivore cooldown. Reproduction
+also requires locally observable food per living same-diet creature: plant value
+of at least 6 times the herbivore's maximum nutrition, or prey/carcass value of
+at least half the carnivore's maximum nutrition. These are decision thresholds,
+not guarantees that food will remain available through the cooldown.
+
+A carnivore kill creates a carcass worth 50% of the larger of prey maximum health
+and maximum nutrition. Carcasses lose 5% of their remaining energy per tick. A
+carnivore meal transfers at most 10% of its maximum nutrition (at least one
+energy unit), then imposes three handling ticks; energy is removed from the
+carcass before transfer and nutrition is capped at capacity. Critically hungry
+herbivores (at or below 15% nutrition) pursue observed plants even when the route
+is less safe; at or below 5%, immediate local feeding can take precedence over
+escape. Food destinations are scored by nutritional value per living herbivore
+already present. All foraging and reproduction decisions use current cells and
+normal observations only.
+
+The seeded five-world diagnostic is
+`go test -run '^TestSeededCoexistenceDiagnostic$' -count=1 -v`. It runs five
+fixed seeds for 500 ticks from identical 7x7 worlds and compares the pre-change
+revision (`b4f7a6e`) with these rules. At tick 500, carnivores survived in 0/5
+baseline runs and 4/5 changed runs; summed final creature counts were 122 versus
+46, and summed herbivore births were 115 versus 27. Herbivores survived in every
+run in both sets. The changed runs consumed 1,074 plant biomass units versus
+2,378 baseline units and recorded 407 units of carcass energy eaten (the baseline
+had no carcass system). All species coexisted at tick 500 in four changed seeds;
+the fifth lost its carnivores at tick 116. The baseline first lost carnivores on
+ticks 105, 112, 407, 410 and 420; changed carnivores survived to tick 500 in four
+seeds. Neither set had a herbivore extinction by tick 500. This indicates less
+herbivore expansion and better, but not guaranteed, carnivore persistence; it
+does not establish a stable equilibrium. The diagnostic logs 100-tick
+population/plant trajectories, births and deaths by diet, plant growth/consumption,
+carcass energy eaten and first extinction ticks so future tuning can compare
+seeds rather than infer equilibrium from a single simulation.
+
 ## Plant ecology
 
 Each cell has a shared capacity of 100 biomass units. Founding patches use up to

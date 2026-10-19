@@ -114,7 +114,7 @@ func TestSimulateTick_CompetingKillsCountOnce(t *testing.T) {
 	simulateTick(env, CreatureFactory().create, &stats, &totals)
 
 	// Assert
-	if stats.FightDeaths != 1 || stats.TotalDeaths != 1 || totals.Kills != 1 || stats.Eats != 1 || stats.Fights != 2 || totals.Fights != 1 {
+	if stats.FightDeaths != 1 || stats.TotalDeaths != 1 || totals.Kills != 1 || stats.Eats != 0 || stats.Fights != 2 || totals.Fights != 1 {
 		t.Fatalf("duplicate fight credit: %+v / %+v", stats, totals)
 	}
 	if stats.TotalCreatures != 2 || stats.TotalCarnivores != 2 || stats.TotalHerbivores != 0 || len(env[0][1].creatureList) != 0 || b.nutrition != 20 {
@@ -131,7 +131,10 @@ func TestSimulateTick_SnapshotIncludesSleepAndClone(t *testing.T) {
 	parent.health, parent.maxHealth = 100, 100
 	parent.nutrition, parent.maxNutrition, parent.metabolism = 90, 100, 0
 	sleeper := &Creature{X: 1, health: 50, maxHealth: 100, nutrition: 90, maxNutrition: 100, metabolism: 2, maxAge: 100}
-	env := [][]environment{{{creatureList: []*Creature{parent}}, {creatureList: []*Creature{sleeper}}}}
+	env := [][]environment{{
+		{capacity: plantCellCapacity, plants: [plantSpeciesCount]plantPopulation{{biomass: 100}}, creatureList: []*Creature{parent}},
+		{capacity: plantCellCapacity, plants: [plantSpeciesCount]plantPopulation{{biomass: 100}}, creatureList: []*Creature{sleeper}},
+	}}
 	var stats TickStats
 
 	// Act

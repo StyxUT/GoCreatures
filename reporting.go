@@ -16,8 +16,8 @@ func collectAncestryStats(env [][]environment, ancestryStats *[]AncestryStats) {
 }
 
 func printTickStats(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals) {
-	fmt.Printf("Tick: %d | TotalDeaths: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d \n\rBiomassAdded: %.2f | BiomassTransferred: %.2f | BiomassConsumed: %.2f | Clones: %d | Eats: %d | Moves: %d | Fights: %d | Sleeps: %d\r\n",
-		tickStats.Tick, tickStats.TotalDeaths, tickStats.AgeDeaths, tickStats.StarvationDeaths, tickStats.FightDeaths, tickStats.BiomassAdded, tickStats.BiomassTransferred[PlantGrass]+tickStats.BiomassTransferred[PlantClover]+tickStats.BiomassTransferred[PlantBramble], tickStats.BiomassConsumed, tickStats.Clones, tickStats.Eats, tickStats.Moves, tickStats.Fights, tickStats.Sleeps)
+	fmt.Printf("Tick: %d | TotalDeaths: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d \n\rBiomassAdded: %.2f | BiomassTransferred: %.2f | BiomassConsumed: %.2f | Meat: %.1f | Clones: %d | Eats: %d | Moves: %d | Fights: %d | Sleeps: %d\r\n",
+		tickStats.Tick, tickStats.TotalDeaths, tickStats.AgeDeaths, tickStats.StarvationDeaths, tickStats.FightDeaths, tickStats.BiomassAdded, tickStats.BiomassTransferred[PlantGrass]+tickStats.BiomassTransferred[PlantClover]+tickStats.BiomassTransferred[PlantBramble], tickStats.BiomassConsumed, tickStats.CarcassEnergyEaten, tickStats.Clones, tickStats.Eats, tickStats.Moves, tickStats.Fights, tickStats.Sleeps)
 	fmt.Printf("Creatures: %d | Carnivores: %d | Herbivores: %d\r\n", tickStats.TotalCreatures, tickStats.TotalCarnivores, tickStats.TotalHerbivores)
 	fmt.Print(formatPlantStats(tickStats))
 	if carnivoreTotals != nil {

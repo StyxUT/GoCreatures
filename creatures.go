@@ -20,6 +20,8 @@ type Creature struct {
 	age               int
 	maxAge            int
 	immobileTicks     int
+	cloneCooldown     int
+	handlingTicks     int
 	metabolism        int
 	nutrition         int
 	nutritionProgress float64

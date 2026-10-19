@@ -41,6 +41,9 @@ type TickStats struct {
 	PlantTraits          [plantSpeciesCount]PlantTraitSummary
 	PlantCapacity        float64
 	PlantCumulative      PlantCumulativeTotals
+	CarcassesCreated     int
+	CarcassEnergyCreated float64
+	CarcassEnergyEaten   float64
 }
 
 type PlantTraitSummary struct {
@@ -121,6 +124,11 @@ type environment struct {
 	creatureList []*Creature
 	capacity     float64
 	plants       [plantSpeciesCount]plantPopulation
+	carcass      carcassState
+}
+
+type carcassState struct {
+	energy float64
 }
 
 var plantTraits = [plantSpeciesCount]struct {
@@ -424,6 +432,12 @@ func simulateTick(env [][]environment, creatureFac func(*Creature) *Creature, ti
 		if c.immobileTicks > 0 {
 			c.immobileTicks--
 		}
+		if c.cloneCooldown > 0 {
+			c.cloneCooldown--
+		}
+		if c.handlingTicks > 0 {
+			c.handlingTicks--
+		}
 		processNutrition(c)
 		processHealth(c, tickStats, carnivoreTotals)
 	}
@@ -579,6 +593,10 @@ func processEnvironment(env [][]environment, tickStats *TickStats, carnivoreTota
 	for i := range env {
 		for j := range env[i] {
 			cell := &env[i][j]
+			cell.carcass.energy *= 1 - carcassDecayPerTick
+			if cell.carcass.energy < 0.01 {
+				cell.carcass = carcassState{}
+			}
 			newList := cell.creatureList[:0]
 			for _, c := range cell.creatureList {
 				switch {

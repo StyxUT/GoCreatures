@@ -86,6 +86,10 @@ func TestHerbivoreAvoidanceRespectsPerceptionAndImmobility(t *testing.T) {
 			if name == "immobile" {
 				c.immobileTicks = 2
 				want = "sleep"
+			} else {
+				c.nutrition = 80
+				env[c.Y][c.X].capacity = plantCellCapacity
+				env[c.Y][c.X].plants[PlantGrass] = plantPopulation{biomass: 50}
 			}
 
 			// Act / Assert.
@@ -123,5 +127,59 @@ func TestTrappedHerbivoreCanStillEat(t *testing.T) {
 	// Act / Assert.
 	if intent := c.decideAction(env); intent.Type != "eat" {
 		t.Fatalf("expected feeding when no escape exists, got %+v", intent)
+	}
+}
+
+func TestCriticallyHungryHerbivoreRisksCloserPredatorToReachKnownFood(t *testing.T) {
+	env := make([][]environment, 1)
+	env[0] = make([]environment, 5)
+	for x := range env[0] {
+		env[0][x].capacity = plantCellCapacity
+	}
+	herbivore := &Creature{X: 2, Y: 0, health: 100, maxHealth: 100, nutrition: 10, maxNutrition: 100, age: 10, maxAge: 100, vision: 5}
+	predator := &Creature{X: 4, Y: 0, health: 100, diet: DietCarnivore}
+	env[0][2].creatureList = []*Creature{herbivore}
+	env[0][3].plants[PlantGrass] = plantPopulation{biomass: 50}
+	env[0][4].creatureList = []*Creature{predator}
+
+	intent := herbivore.decideAction(env)
+	if intent.Type != "move" || intent.TargetX != 3 || intent.TargetY != 0 {
+		t.Fatalf("critically hungry herbivore did not pursue known food: %+v", intent)
+	}
+}
+
+func TestStarvationRiskPrioritizesEscapeOverLocalFood(t *testing.T) {
+	env := make([][]environment, 1)
+	env[0] = make([]environment, 5)
+	for x := range env[0] {
+		env[0][x].capacity = plantCellCapacity
+	}
+	herbivore := &Creature{X: 2, Y: 0, health: 100, maxHealth: 100, nutrition: 10, maxNutrition: 100, age: 10, maxAge: 100, vision: 5}
+	predator := &Creature{X: 1, Y: 0, health: 100, diet: DietCarnivore}
+	env[0][2].creatureList = []*Creature{herbivore}
+	env[0][2].plants[PlantGrass] = plantPopulation{biomass: 20}
+	env[0][1].creatureList = []*Creature{predator}
+
+	intent := herbivore.decideAction(env)
+	if intent.Type != "move" || intent.TargetX != 3 {
+		t.Fatalf("hungry herbivore chose feeding over a safe escape: %+v", intent)
+	}
+}
+
+func TestHerbivoreForagingDiscountsCrowdedFoodCells(t *testing.T) {
+	env, herbivore := avoidanceWorld(1, 5, 2, 0)
+	herbivore.nutrition = 50
+	herbivore.num = 1
+	herbivore.vision = 10
+	env[0][2].plants[PlantGrass].biomass = 0
+	env[0][0].plants[PlantGrass] = plantPopulation{biomass: 80}
+	env[0][4].plants[PlantGrass] = plantPopulation{biomass: 100}
+	for i := 0; i < 3; i++ {
+		env[0][4].creatureList = append(env[0][4].creatureList, &Creature{diet: DietHerbivore, health: 100})
+	}
+
+	intent := herbivore.decideAction(env)
+	if intent.Type != "move" || intent.TargetX != 1 {
+		t.Fatalf("herbivore ignored per-grazer food availability: %+v", intent)
 	}
 }

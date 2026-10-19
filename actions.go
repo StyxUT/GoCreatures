@@ -5,16 +5,144 @@ import (
 )
 
 const (
-	herbivoreNutritionPerBiomass = 15
-	herbivorePlantSeekingValue   = 30 * herbivoreNutritionPerBiomass
-	carnivoreKillNutritionGain   = herbivoreNutritionPerBiomass * 10
-	cloneBaseImmobileTicks       = 10
-	carnivoreFightNutritionMin   = 20
-	carnivoreCriticalNutrition   = 25
-	carnivoreFightHerbHealth     = 40
-	carnivoreFightRivalHealth    = 60
-	carnivoreRetreatHealth       = 35
+	herbivoreNutritionPerBiomass   = 15
+	herbivorePlantSeekingValue     = 30 * herbivoreNutritionPerBiomass
+	carcassEnergyFraction          = 0.5
+	carcassDecayPerTick            = 0.05
+	carnivoreMealFraction          = 0.1
+	carnivoreHandlingDuration      = 3
+	cloneBaseImmobileTicks         = 10
+	carnivoreFightNutritionMin     = 20
+	carnivoreCriticalNutrition     = 25
+	carnivoreFightHerbHealth       = 40
+	carnivoreFightRivalHealth      = 60
+	carnivoreRetreatHealth         = 35
+	herbivoreCriticalHungerPercent = 15
+	herbivoreStarvationRiskPercent = 5
+	herbivoreCloneCooldown         = 20
+	carnivoreCloneCooldown         = 40
+	cloneEnergyFraction            = 0.2
+	cloneNutritionReserve          = 0.5
+	cloneFoodPerHerbivoreFraction  = 6.0
 )
+
+func cloneCooldownFor(creature *Creature) int {
+	if creature.isCarnivore() {
+		return carnivoreCloneCooldown
+	}
+	return herbivoreCloneCooldown
+}
+
+func canReproduce(c *Creature, env [][]environment, pctHealth, pctAge float64) bool {
+	if c == nil || c.immobileTicks > 0 || c.cloneCooldown > 0 || pctAge <= 20 || pctAge >= 90 || pctHealth <= 70 || c.maxNutrition <= 0 {
+		return false
+	}
+	budget := int(float64(c.maxNutrition) * cloneEnergyFraction)
+	minimumEnergy := int(float64(c.maxNutrition) * (cloneEnergyFraction + cloneNutritionReserve))
+	if c.nutrition < minimumEnergy || c.nutrition < budget {
+		return false
+	}
+	if c.isCarnivore() {
+		return observablePreyValue(c, env)/float64(observableCarnivoreCount(c, env)) >= float64(c.maxNutrition)*cloneNutritionReserve
+	}
+	return observablePlantValue(c, env)/float64(observableHerbivoreCount(c, env)) >= float64(c.maxNutrition)*cloneFoodPerHerbivoreFraction
+}
+
+func observableHerbivoreCount(creature *Creature, env [][]environment) int {
+	count := 0
+	if creature == nil || creature.Y < 0 || creature.Y >= len(env) || creature.X < 0 || creature.X >= len(env[creature.Y]) {
+		return 1
+	}
+	count += herbivoreCount(env[creature.Y][creature.X].creatureList)
+	for _, location := range creature.observed {
+		if location.Env != nil {
+			count += herbivoreCount(location.Env.creatureList)
+		}
+	}
+	return max(count, 1)
+}
+
+func herbivoreCount(creatures []*Creature) int {
+	count := 0
+	for _, creature := range creatures {
+		if !creature.isCarnivore() && creature.health > 0 {
+			count++
+		}
+	}
+	return count
+}
+
+func observableCarnivoreCount(creature *Creature, env [][]environment) int {
+	count := 0
+	if creature == nil || creature.Y < 0 || creature.Y >= len(env) || creature.X < 0 || creature.X >= len(env[creature.Y]) {
+		return 1
+	}
+	count += carnivoreCount(env[creature.Y][creature.X].creatureList)
+	for _, location := range creature.observed {
+		if location.Env != nil {
+			count += carnivoreCount(location.Env.creatureList)
+		}
+	}
+	return max(count, 1)
+}
+
+func carnivoreCount(creatures []*Creature) int {
+	count := 0
+	for _, creature := range creatures {
+		if creature.isCarnivore() && creature.health > 0 {
+			count++
+		}
+	}
+	return count
+}
+
+func observablePreyValue(creature *Creature, env [][]environment) float64 {
+	if creature == nil || creature.Y < 0 || creature.Y >= len(env) || creature.X < 0 || creature.X >= len(env[creature.Y]) {
+		return 0
+	}
+	value := env[creature.Y][creature.X].carcass.energy
+	for _, prey := range env[creature.Y][creature.X].creatureList {
+		if prey != creature && !prey.isCarnivore() && prey.health > 0 {
+			value += float64(max(prey.maxNutrition, prey.maxHealth)) * carcassEnergyFraction
+		}
+	}
+	for _, location := range creature.observed {
+		if location.Env == nil {
+			continue
+		}
+		value += location.Env.carcass.energy
+		for _, prey := range location.Env.creatureList {
+			if !prey.isCarnivore() && prey.health > 0 {
+				value += float64(max(prey.maxNutrition, prey.maxHealth)) * carcassEnergyFraction
+			}
+		}
+	}
+	return value
+}
+
+func observablePlantValue(creature *Creature, env [][]environment) float64 {
+	if creature == nil || creature.Y < 0 || creature.Y >= len(env) || creature.X < 0 || creature.X >= len(env[creature.Y]) {
+		return 0
+	}
+	value := plantNutritionalValue(&env[creature.Y][creature.X])
+	for _, location := range creature.observed {
+		value += plantNutritionalValue(location.Env)
+	}
+	return value
+}
+
+func plantForagingScore(location ObservedLocation) float64 {
+	if location.Env == nil {
+		return 0
+	}
+	competitors := 0
+	for _, creature := range location.Env.creatureList {
+		if !creature.isCarnivore() && creature.health > 0 {
+			competitors++
+		}
+	}
+	return plantNutritionalValue(location.Env) / float64(max(competitors, 1))
+}
 
 func cloneImmobileTicks(c *Creature) int {
 	if c == nil {
@@ -45,7 +173,21 @@ func (c *Creature) decideAction(env [][]environment) ActionIntent {
 	if canMove {
 		threats = observedCarnivoreLocations(c, &env[c.Y][c.X])
 		if destination, ok := selectHerbivoreEscape(c, env, threats); ok {
-			return ActionIntent{Creature: c, Type: "move", TargetX: destination.X, TargetY: destination.Y}
+			escape := ActionIntent{Creature: c, Type: "move", TargetX: destination.X, TargetY: destination.Y}
+			if pctNutrition > herbivoreCriticalHungerPercent {
+				return escape
+			}
+			food := decideHerbivoreAction(c, env, location, pctHealth, pctAge, pctNutrition, canMove)
+			if food.Type == "eat" {
+				if pctNutrition <= herbivoreStarvationRiskPercent {
+					return food
+				}
+				return escape
+			}
+			if food.Type == "move" && nearestCarnivoreDistance(food.TargetX, food.TargetY, threats) > 0 {
+				return food
+			}
+			return escape
 		}
 	}
 	intent := decideHerbivoreAction(c, env, location, pctHealth, pctAge, pctNutrition, canMove)
@@ -86,24 +228,22 @@ func decideHerbivoreAction(c *Creature, env [][]environment, location environmen
 		}
 	}
 
-	// Clone if between 20% & 90% maxAge && >= 70% of maxHealth
-	if c.immobileTicks == 0 && pctAge > 20 && pctAge < 90 && pctHealth > 70 {
-
-		return ActionIntent{
-			Creature: c,
-			Type:     "clone",
-		}
-	}
-
 	// Hungry herbivores compare mixed vegetation by total nutritional value.
-	// 		TODO: reduce location preference if others are in the area
-	SortEnvironmentListByNutritionalValue(c.observed)
+	slices.SortStableFunc(c.observed, func(a, b ObservedLocation) int {
+		if plantForagingScore(a) > plantForagingScore(b) {
+			return -1
+		}
+		if plantForagingScore(a) < plantForagingScore(b) {
+			return 1
+		}
+		return 0
+	})
 	currentPlantValue := plantNutritionalValue(&env[c.Y][c.X])
-	if canMove && len(c.observed) > 0 && pctNutrition > 30 && pctNutrition < 70 && currentPlantValue < herbivorePlantSeekingValue && currentPlantValue < plantNutritionalValue(c.observed[0].Env) {
-		bestPlantValue := plantNutritionalValue(c.observed[0].Env)
+	if canMove && len(c.observed) > 0 && (pctNutrition <= herbivoreCriticalHungerPercent || (pctNutrition > 30 && pctNutrition < 70)) && currentPlantValue < herbivorePlantSeekingValue && currentPlantValue < plantForagingScore(c.observed[0]) {
+		bestPlantValue := plantForagingScore(c.observed[0])
 		var bests []ObservedLocation
 		for _, ol := range c.observed {
-			if plantNutritionalValue(ol.Env) == bestPlantValue {
+			if plantForagingScore(ol) == bestPlantValue {
 				bests = append(bests, ol)
 			} else {
 				break
@@ -127,6 +267,10 @@ func decideHerbivoreAction(c *Creature, env [][]environment, location environmen
 			Creature: c,
 			Type:     "eat",
 		}
+	}
+
+	if canReproduce(c, env, pctHealth, pctAge) && pctNutrition > herbivoreCriticalHungerPercent {
+		return ActionIntent{Creature: c, Type: "clone"}
 	}
 
 	// If crowded move toward an empty location
@@ -192,8 +336,17 @@ func decideHerbivoreAction(c *Creature, env [][]environment, location environmen
 }
 
 func decideCarnivoreAction(c *Creature, env [][]environment, location environment, pctHealth, pctAge, pctNutrition float64, canMove bool) ActionIntent {
-	if c.immobileTicks == 0 && pctAge > 20 && pctAge < 90 && pctHealth > 70 {
-		return ActionIntent{Creature: c, Type: "clone"}
+	if c.handlingTicks > 0 {
+		return ActionIntent{Creature: c, Type: "sleep"}
+	}
+	if location.carcass.energy > 0 && pctNutrition < 80 {
+		return ActionIntent{Creature: c, Type: "eat"}
+	}
+	if canMove && pctNutrition < 80 {
+		if carcass, ok := selectCarcassLocation(c); ok {
+			dx, dy := sign(carcass.X-c.X), sign(carcass.Y-c.Y)
+			return ActionIntent{Creature: c, Type: "move", TargetX: c.X + dx, TargetY: c.Y + dy}
+		}
 	}
 
 	adjacentTarget := selectAdjacentCarnivorePrey(c, env)
@@ -201,6 +354,9 @@ func decideCarnivoreAction(c *Creature, env [][]environment, location environmen
 		if canCarnivoreFightTarget(c, adjacentTarget, pctHealth, pctNutrition, true) {
 			return ActionIntent{Creature: c, Type: "fight", TargetCreature: adjacentTarget}
 		}
+	}
+	if canReproduce(c, env, pctHealth, pctAge) && pctNutrition > carnivoreCriticalNutrition {
+		return ActionIntent{Creature: c, Type: "clone"}
 	}
 
 	if canMove && pctHealth < carnivoreRetreatHealth && pctNutrition > carnivoreCriticalNutrition {
@@ -267,6 +423,20 @@ func decideCarnivoreAction(c *Creature, env [][]environment, location environmen
 	}
 
 	return ActionIntent{Creature: c, Type: "move", TargetX: c.X + dx, TargetY: c.Y + dy}
+}
+
+func selectCarcassLocation(creature *Creature) (ObservedLocation, bool) {
+	if creature == nil {
+		return ObservedLocation{}, false
+	}
+	var selected ObservedLocation
+	energy := 0.0
+	for _, location := range creature.observed {
+		if location.Env != nil && location.Env.carcass.energy > energy {
+			selected, energy = location, location.Env.carcass.energy
+		}
+	}
+	return selected, energy > 0
 }
 
 func canCarnivoreFightTarget(hunter, target *Creature, pctHealth, pctNutrition float64, adjacent bool) bool {
@@ -538,7 +708,7 @@ func resolveActions(intents []ActionIntent, env [][]environment, creatureFac fun
 		}
 		fought[intent.Creature] = true
 		fought[intent.TargetCreature] = true
-		resolveFight(intent, tickStats, carnivoreTotals)
+		resolveFight(intent, tickStats, carnivoreTotals, env)
 		if carnivoreTotals != nil {
 			if intent.Creature.isCarnivore() {
 				carnivoreTotals.Fights++
@@ -561,6 +731,12 @@ func resolveActions(intents []ActionIntent, env [][]environment, creatureFac fun
 
 	for _, intent := range eatIntents {
 		if !fought[intent.Creature] {
+			if intent.Creature.isCarnivore() {
+				cell := &env[intent.Creature.Y][intent.Creature.X]
+				if cell.carcass.energy <= 0 || intent.Creature.handlingTicks > 0 {
+					continue
+				}
+			}
 			tickStats.Eats++
 			if carnivoreTotals != nil && intent.Creature.isCarnivore() {
 				carnivoreTotals.Eats++
@@ -625,7 +801,7 @@ func reciprocalMoveCreatures(moveIntents []ActionIntent) map[*Creature]bool {
 }
 
 // Resolve "Fight" action
-func resolveFight(intent ActionIntent, tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals) {
+func resolveFight(intent ActionIntent, tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals, worlds ...[][]environment) {
 	c := intent.Creature
 	tc := intent.TargetCreature
 	if c == nil || tc == nil || c == tc || c.health <= 0 || tc.health <= 0 {
@@ -659,33 +835,51 @@ func resolveFight(intent ActionIntent, tickStats *TickStats, carnivoreTotals *Ca
 		if carnivoreTotals != nil && c.isCarnivore() {
 			carnivoreTotals.FightDeaths++
 		}
-		feedCarnivoreOnKill(tc, c, tickStats, carnivoreTotals)
+		feedCarnivoreOnKill(tc, c, tickStats, carnivoreTotals, worlds...)
 	}
 	if tc.health <= 0 {
 		tickStats.FightDeaths++
 		if carnivoreTotals != nil && tc.isCarnivore() {
 			carnivoreTotals.FightDeaths++
 		}
-		feedCarnivoreOnKill(c, tc, tickStats, carnivoreTotals)
+		feedCarnivoreOnKill(c, tc, tickStats, carnivoreTotals, worlds...)
 	}
 }
 
-func feedCarnivoreOnKill(predator, prey *Creature, tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals) {
-	if predator == nil || prey == nil || !predator.isCarnivore() || predator.health <= 0 {
+func feedCarnivoreOnKill(predator, prey *Creature, tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals, worlds ...[][]environment) {
+	if predator == nil || prey == nil || !predator.isCarnivore() || predator.health <= 0 || len(worlds) == 0 {
 		return
 	}
+	if prey.Y < 0 || prey.Y >= len(worlds[0]) || prey.X < 0 || prey.X >= len(worlds[0][prey.Y]) {
+		return
+	}
+	energy := float64(max(prey.maxNutrition, prey.maxHealth)) * carcassEnergyFraction
+	worlds[0][prey.Y][prey.X].carcass.energy += energy
 	if tickStats != nil {
-		tickStats.Eats++
+		tickStats.CarcassesCreated++
+		tickStats.CarcassEnergyCreated += energy
 	}
 	if carnivoreTotals != nil {
-		carnivoreTotals.Eats++
 		carnivoreTotals.Kills++
 	}
-	if predator.maxNutrition > 0 {
-		predator.nutrition = min(predator.nutrition+carnivoreKillNutritionGain, predator.maxNutrition)
+}
+
+func eatCarcass(creature *Creature, cell *environment, tickStats *TickStats) {
+	if creature == nil || cell == nil || !creature.isCarnivore() || creature.handlingTicks > 0 || cell.carcass.energy <= 0 {
 		return
 	}
-	predator.nutrition += carnivoreKillNutritionGain
+	meal := minFloat(cell.carcass.energy, maxFloat(float64(creature.maxNutrition)*carnivoreMealFraction, 1))
+	if meal <= 0 {
+		return
+	}
+	cell.carcass.energy -= meal
+	applyPlantNutrition(creature, meal)
+	// Counters decay at tick entry, so retain one extra to block the full
+	// configured number of following decisions.
+	creature.handlingTicks = carnivoreHandlingDuration + 1
+	if tickStats != nil {
+		tickStats.CarcassEnergyEaten += meal
+	}
 }
 
 // Apply a nutrition cost scaled by metabolism.
@@ -726,10 +920,23 @@ func resolveMove(intent ActionIntent, env [][]environment) {
 // Resolve "Clone" creature action
 func resolveClone(intent ActionIntent, env [][]environment, createCreature func(*Creature) *Creature) {
 	parent := intent.Creature
+	if parent == nil || parent.maxNutrition <= 0 {
+		return
+	}
+	energyBudget := int(float64(parent.maxNutrition) * cloneEnergyFraction)
+	minimumEnergy := int(float64(parent.maxNutrition) * (cloneEnergyFraction + cloneNutritionReserve))
+	if parent.nutrition < minimumEnergy || parent.nutrition < energyBudget || parent.cloneCooldown > 0 {
+		return
+	}
 	x, y := parent.X, parent.Y
 
 	// Create clone
 	clone := createCreature(parent)
+	if clone == nil {
+		return
+	}
+	clone.nutrition = energyBudget
+	clone.nutritionProgress = 0
 	clone.X = x
 	clone.Y = y
 
@@ -738,9 +945,13 @@ func resolveClone(intent ActionIntent, env [][]environment, createCreature func(
 
 	// Reduce parent's health by 70% after offspring stats are derived from pre-cost parent state.
 	parent.health = int(float64(parent.health) * 0.3)
-	parent.nutrition = int(float64(parent.nutrition) * 0.6)
+	parent.nutrition -= energyBudget
 	parent.immobileTicks = cloneImmobileTicks(parent)
 	clone.immobileTicks = cloneImmobileTicks(clone)
+	// Cooldowns decay at tick entry, so keep one extra count to block the
+	// configured number of full subsequent decisions.
+	parent.cloneCooldown = cloneCooldownFor(parent) + 1
+	clone.cloneCooldown = cloneCooldownFor(clone) + 1
 }
 
 // Resolve "Eat" creature action
@@ -748,6 +959,7 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 	c := intent.Creature
 	location := &env[c.Y][c.X]
 	if c.isCarnivore() {
+		eatCarcass(c, location, tickStats)
 		return
 	}
 

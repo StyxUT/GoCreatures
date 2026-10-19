@@ -85,6 +85,14 @@ func TestPrintTickStats_ReadOnly(t *testing.T) {
 	}
 }
 
+func TestPrintTickStatsReportsConsumedCarcassEnergy(t *testing.T) {
+	stats := TickStats{CarcassEnergyEaten: 12.5}
+	output := captureStdout(t, func() { printTickStats(&stats, nil) })
+	if !strings.Contains(output, "Meat: 12.5") {
+		t.Fatalf("predator meal energy missing from compact tick report: %q", output)
+	}
+}
+
 func TestPrintTickStatsReportsEcologySnapshotAndCumulativeEvents(t *testing.T) {
 	stats := TickStats{
 		PlantBiomass:        [plantSpeciesCount]float64{42, 25, 10},
