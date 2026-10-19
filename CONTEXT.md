@@ -49,3 +49,20 @@ purple crosshatch. Empty positions use dark soil; positive biomass uses sparse
 bands. Creature glyphs cover the corresponding foreground texture while its
 species-specific background remains visible. The legend documents this overlay
 limitation. Rendering is deterministic and uses no simulation randomness.
+
+## Plant ecology
+
+Each cell has a shared capacity of 100 biomass units. Founding patches use up to
+`max(1, ceil(cellCount/300))` centers per species, with 20 biomass at a center
+and 5 in each in-bounds cardinal halo cell; overlapping requests are scaled to
+fit capacity. Each tick snapshots vegetation, accumulates fractional growth
+from existing colonies at grass/clover/bramble rates 0.08/0.04/0.02 scaled by
+the free-capacity fraction, then resolves local spread intents. Eligible
+colonies (20/30/40 biomass) attempt spread with probability 0.02/0.01/0.005
+respectively, targeting one uniformly selected cardinal/four-neighbor/eight
+neighbor-within-distance-two offset. Establishment requires a free species slot,
+one biomass unit of source and destination capacity; that unit transfers from
+parent to daughter colony. Tick-start snapshots prevent same-tick cascades.
+Growth (`BiomassAdded`), establishment transfers (`BiomassTransferred`) and
+grazing (`BiomassConsumed`) are accounted separately. Empty regions and extinct
+species do not spontaneously reappear.

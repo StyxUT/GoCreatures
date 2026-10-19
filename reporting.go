@@ -16,8 +16,8 @@ func collectAncestryStats(env [][]environment, ancestryStats *[]AncestryStats) {
 
 func printTickStats(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals) {
 	avgDivisor := max(tickStats.TotalCreatures, 1)
-	fmt.Printf("Tick: %d | TotalDeaths: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d \n\rBiomassAdded: %.2f | BiomassConsumed: %.2f | Clones: %d | Eats: %d | Moves: %d | Fights: %d | Sleeps: %d\r\n",
-		tickStats.Tick, tickStats.TotalDeaths, tickStats.AgeDeaths, tickStats.StarvationDeaths, tickStats.FightDeaths, tickStats.BiomassAdded, tickStats.BiomassConsumed, tickStats.Clones, tickStats.Eats, tickStats.Moves, tickStats.Fights, tickStats.Sleeps)
+	fmt.Printf("Tick: %d | TotalDeaths: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d \n\rBiomassAdded: %.2f | BiomassTransferred: %.2f | BiomassConsumed: %.2f | Clones: %d | Eats: %d | Moves: %d | Fights: %d | Sleeps: %d\r\n",
+		tickStats.Tick, tickStats.TotalDeaths, tickStats.AgeDeaths, tickStats.StarvationDeaths, tickStats.FightDeaths, tickStats.BiomassAdded, tickStats.BiomassTransferred[PlantGrass]+tickStats.BiomassTransferred[PlantClover]+tickStats.BiomassTransferred[PlantBramble], tickStats.BiomassConsumed, tickStats.Clones, tickStats.Eats, tickStats.Moves, tickStats.Fights, tickStats.Sleeps)
 	fmt.Printf("Avg Age: %.1f | Avg Health: %.1f | Avg Nutrition: %.1f\r\n",
 		float64(tickStats.TotalAge)/float64(avgDivisor), float64(tickStats.TotalHealth)/float64(avgDivisor), float64(tickStats.TotalNutrition)/float64(avgDivisor))
 	fmt.Printf("Creatures: %d | Carnivores: %d | Herbivores: %d\r\n", tickStats.TotalCreatures, tickStats.TotalCarnivores, tickStats.TotalHerbivores)

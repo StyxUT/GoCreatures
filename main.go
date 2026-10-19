@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,27 +13,28 @@ import (
 )
 
 type TickStats struct {
-	Tick             int
-	TotalCreatures   int
-	TotalCarnivores  int
-	TotalHerbivores  int
-	TotalDeaths      int
-	AgeDeaths        int
-	StarvationDeaths int
-	FightDeaths      int
-	TotalAge         int
-	TotalHealth      int
-	TotalNutrition   int
-	Clones           int
-	Eats             int
-	Moves            int
-	Fights           int
-	Sleeps           int
-	BiomassAdded     float64
-	HealthAdded      int
-	BiomassConsumed  float64
-	PlantBiomass     [plantSpeciesCount]float64
-	PlantCapacity    float64
+	Tick               int
+	TotalCreatures     int
+	TotalCarnivores    int
+	TotalHerbivores    int
+	TotalDeaths        int
+	AgeDeaths          int
+	StarvationDeaths   int
+	FightDeaths        int
+	TotalAge           int
+	TotalHealth        int
+	TotalNutrition     int
+	Clones             int
+	Eats               int
+	Moves              int
+	Fights             int
+	Sleeps             int
+	BiomassAdded       float64
+	HealthAdded        int
+	BiomassConsumed    float64
+	BiomassTransferred [plantSpeciesCount]float64
+	PlantBiomass       [plantSpeciesCount]float64
+	PlantCapacity      float64
 }
 
 type CarnivoreActionTotals struct {
@@ -58,6 +60,16 @@ const (
 )
 
 const plantCellCapacity = 100.0
+
+var plantSpread = [plantSpeciesCount]struct {
+	threshold   float64
+	probability float64
+	offsets     [][2]int
+}{
+	{threshold: 20, probability: 0.02, offsets: [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}},
+	{threshold: 30, probability: 0.01, offsets: [][2]int{{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}}},
+	{threshold: 40, probability: 0.005, offsets: [][2]int{{-2, -2}, {-1, -2}, {0, -2}, {1, -2}, {2, -2}, {-2, -1}, {-1, -1}, {0, -1}, {1, -1}, {2, -1}, {-2, 0}, {-1, 0}, {1, 0}, {2, 0}, {-2, 1}, {-1, 1}, {0, 1}, {1, 1}, {2, 1}, {-2, 2}, {-1, 2}, {0, 2}, {1, 2}, {2, 2}}},
+}
 
 type PlantState struct {
 	Species          PlantSpecies
@@ -453,14 +465,16 @@ func cellHasCarnivore(creatures []*Creature) bool {
 }
 
 func processEnvironment(env [][]environment, tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals) {
+	added, transferred := updatePlants(env)
+	if tickStats != nil {
+		tickStats.BiomassAdded += added
+		for species, amount := range transferred {
+			tickStats.BiomassTransferred[species] += amount
+		}
+	}
 	for i := range env {
 		for j := range env[i] {
 			cell := &env[i][j]
-			if tickStats != nil {
-				tickStats.BiomassAdded += regrowPlants(cell)
-			} else {
-				regrowPlants(cell)
-			}
 			newList := cell.creatureList[:0]
 			for _, c := range cell.creatureList {
 				switch {
@@ -478,6 +492,95 @@ func processEnvironment(env [][]environment, tickStats *TickStats, carnivoreTota
 			cell.creatureList = newList
 		}
 	}
+}
+
+type plantSpreadIntent struct {
+	sourceX, sourceY int
+	targetX, targetY int
+	species          PlantSpecies
+	priority         float64
+}
+
+// updatePlants bases growth and spread decisions on one tick-start snapshot,
+// then applies growth and propagule transfers without within-tick cascades.
+func updatePlants(env [][]environment) (float64, [plantSpeciesCount]float64) {
+	var transferred [plantSpeciesCount]float64
+	snapshot := make([][][plantSpeciesCount]plantPopulation, len(env))
+	for y := range env {
+		snapshot[y] = make([][plantSpeciesCount]plantPopulation, len(env[y]))
+		for x := range env[y] {
+			snapshot[y][x] = env[y][x].plants
+		}
+	}
+
+	var intents []plantSpreadIntent
+	for y := range snapshot {
+		for x := range snapshot[y] {
+			for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
+				colony := snapshot[y][x][species]
+				config := plantSpread[species]
+				if colony.biomass < config.threshold || RandFloat64() >= config.probability || len(config.offsets) == 0 {
+					continue
+				}
+				offset := config.offsets[RandIntn(len(config.offsets))]
+				targetX, targetY := x+offset[0], y+offset[1]
+				if targetY < 0 || targetY >= len(snapshot) || targetX < 0 || targetX >= len(snapshot[targetY]) || snapshot[targetY][targetX][species].biomass > 0 {
+					continue
+				}
+				intents = append(intents, plantSpreadIntent{
+					sourceX: x, sourceY: y, targetX: targetX, targetY: targetY,
+					species: species, priority: RandFloat64(),
+				})
+			}
+		}
+	}
+
+	added := 0.0
+	for y := range env {
+		for x := range env[y] {
+			added += regrowPlants(&env[y][x])
+		}
+	}
+	sort.Slice(intents, func(i, j int) bool {
+		a, b := intents[i], intents[j]
+		if a.priority != b.priority {
+			return a.priority < b.priority
+		}
+		if a.targetY != b.targetY {
+			return a.targetY < b.targetY
+		}
+		if a.targetX != b.targetX {
+			return a.targetX < b.targetX
+		}
+		if a.sourceY != b.sourceY {
+			return a.sourceY < b.sourceY
+		}
+		if a.sourceX != b.sourceX {
+			return a.sourceX < b.sourceX
+		}
+		return a.species < b.species
+	})
+	for _, intent := range intents {
+		source := &env[intent.sourceY][intent.sourceX]
+		target := &env[intent.targetY][intent.targetX]
+		if source.plants[intent.species].biomass < 1 || target.plants[intent.species].biomass > 0 {
+			continue
+		}
+		total := 0.0
+		for _, population := range target.plants {
+			total += population.biomass
+		}
+		if target.capacity-total < 1 {
+			continue
+		}
+		source.plants[intent.species].biomass--
+		target.plants[intent.species] = plantPopulation{
+			biomass: 1, regrowthRate: source.plants[intent.species].regrowthRate,
+			nutritionalYield: source.plants[intent.species].nutritionalYield,
+		}
+		transferred[intent.species]++
+	}
+	return added, transferred
 }
 
 func regrowPlants(cell *environment) float64 {

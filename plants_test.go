@@ -213,6 +213,97 @@ func TestPlantDoesNotRegrowWithoutALocalPopulation(t *testing.T) {
 	}
 }
 
+func TestPlantColoniesSpreadLocallyWithoutSameTickCascade(t *testing.T) {
+	spreadObserved := false
+	for seed := int64(0); seed < 1000 && !spreadObserved; seed++ {
+		ResetRand(seed)
+		env := make([][]environment, 5)
+		for y := range env {
+			env[y] = make([]environment, 5)
+			for x := range env[y] {
+				env[y][x].capacity = plantCellCapacity
+			}
+		}
+		env[2][2].plants[PlantGrass] = plantPopulation{biomass: 20}
+		stats := &TickStats{}
+		processEnvironment(env, stats, nil)
+
+		spreadCells := 0
+		for y := range env {
+			for x := range env[y] {
+				if env[y][x].plants[PlantGrass].biomass > 0 && (x != 2 || y != 2) {
+					spreadCells++
+					if abs(x-2)+abs(y-2) != 1 {
+						t.Fatalf("grass spread beyond a cardinal neighbor: (%d,%d)", x, y)
+					}
+				}
+			}
+		}
+		if spreadCells > 1 {
+			t.Fatalf("one tick cascaded into %d new colonies", spreadCells)
+		}
+		if spreadCells == 1 {
+			if stats.BiomassTransferred[PlantGrass] != 1 {
+				t.Fatalf("spread transfer = %.2f, want 1 biomass", stats.BiomassTransferred[PlantGrass])
+			}
+			spreadObserved = true
+		}
+	}
+	if !spreadObserved {
+		t.Fatal("grass did not spread with any of 1000 deterministic seeds")
+	}
+}
+
+func TestEachPlantSpeciesUsesItsDocumentedSpreadNeighborhood(t *testing.T) {
+	observed := [plantSpeciesCount]bool{}
+	for seed := int64(0); seed < 2000; seed++ {
+		ResetRand(seed)
+		env := make([][]environment, 7)
+		for y := range env {
+			env[y] = make([]environment, 7)
+			for x := range env[y] {
+				env[y][x].capacity = plantCellCapacity
+			}
+		}
+		for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
+			env[3][3].plants[species] = plantPopulation{biomass: plantSpread[species].threshold}
+		}
+		processEnvironment(env, &TickStats{}, nil)
+		for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
+			if observed[species] {
+				continue
+			}
+			for y := range env {
+				for x := range env[y] {
+					if env[y][x].plants[species].biomass != 1 || (x == 3 && y == 3) {
+						continue
+					}
+					dx, dy := abs(x-3), abs(y-3)
+					switch species {
+					case PlantGrass:
+						if dx+dy != 1 {
+							t.Fatalf("grass spread to (%d,%d), outside cardinal neighborhood", x, y)
+						}
+					case PlantClover:
+						if max(dx, dy) != 1 {
+							t.Fatalf("clover spread to (%d,%d), outside eight neighbors", x, y)
+						}
+					case PlantBramble:
+						if max(dx, dy) > 2 {
+							t.Fatalf("bramble spread to (%d,%d), beyond distance two", x, y)
+						}
+					}
+					observed[species] = true
+				}
+			}
+		}
+		if observed[PlantGrass] && observed[PlantClover] && observed[PlantBramble] {
+			return
+		}
+	}
+	t.Fatalf("did not observe each species spreading: %v", observed)
+}
+
 func TestTickStatisticsSnapshotVegetationState(t *testing.T) {
 	env := [][]environment{{
 		{
