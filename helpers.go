@@ -121,37 +121,22 @@ func hsvToRGB(h, s, v float64) (int, int, int) {
 	return int((r + m) * 255), int((g + m) * 255), int((b + m) * 255)
 }
 
-// Helper function to determine background color
-//
-//	Location background color determined by food amount
-func foodToColor(food int) string {
+// plantBiomassToColor preserves a simple density cue until per-species
+// rendering is layered onto the same cell state.
+func plantBiomassToColor(biomass, capacity float64) string {
+	if capacity <= 0 || biomass <= 0 {
+		return "\033[48;5;94m"
+	}
+	density := biomass / capacity
 	switch {
-	case food > 100:
-		return "\033[48;5;76m"
-	case food > 90:
-		return "\033[48;5;77m"
-	case food > 80:
+	case density >= 0.7:
 		return "\033[48;5;34m"
-	case food > 70:
-		return "\033[48;5;35m"
-	case food > 60:
+	case density >= 0.4:
 		return "\033[48;5;28m"
-	case food > 50:
-		return "\033[48;5;29m"
-	case food > 40:
-		return "\033[48;5;70m"
-	case food > 30:
+	case density >= 0.1:
 		return "\033[48;5;64m"
-	case food > 20:
-		return "\033[48;5;142m"
-	case food > 10:
-		return "\033[48;5;100m"
-	case food > 5:
-		return "\033[48;5;58m"
-	case food > 1:
-		return "\033[48;5;136m"
 	default:
-		return "\033[048;5;94m"
+		return "\033[48;5;100m"
 	}
 }
 
@@ -166,11 +151,34 @@ func flattenCreatureList(env [][]environment) []*Creature {
 	return all
 }
 
-// Helper function to sort a list of environments by food
-func SortEnvironmentListByFood(ol []ObservedLocation) {
-	sort.Slice(ol, func(i, j int) bool {
-		return ol[i].Env.food > ol[j].Env.food
+// SortEnvironmentListByNutritionalValue ranks cells using the same vegetation
+// source and yield calculation as herbivore eating.
+func SortEnvironmentListByNutritionalValue(ol []ObservedLocation) {
+	sort.SliceStable(ol, func(i, j int) bool {
+		return plantNutritionalValue(ol[i].Env) > plantNutritionalValue(ol[j].Env)
 	})
+}
+
+func plantNutritionalValue(cell *environment) float64 {
+	if cell == nil {
+		return 0
+	}
+	value := 0.0
+	for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
+		value += maxFloat(cell.plants[species].biomass, 0) * plantNutritionalYield(cell, species)
+	}
+	return value
+}
+
+func plantBiomassAvailable(cell *environment) float64 {
+	if cell == nil {
+		return 0
+	}
+	biomass := 0.0
+	for _, population := range cell.plants {
+		biomass += maxFloat(population.biomass, 0)
+	}
+	return biomass
 }
 
 // Helper function to sort a list of environments by occupants desc

@@ -1,0 +1,1 @@
+{"id":"int-51a17a75","kind":"field_change","created_at":"2026-10-19T21:44:16.848640731Z","actor":"styxut","issue_id":"gocreatures-bk8.1","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Implemented shared-capacity grass, clover, and bramble ecology with feeding, observation, movement, reporting, and tests."}}

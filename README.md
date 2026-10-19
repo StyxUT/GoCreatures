@@ -33,6 +33,32 @@ go test -bench . ./...
 ## Deterministic Randomness
 Central RNG wrappers (`RandIntn`, `RandFloat64`). For deterministic tests use `ResetRand(seed)` or inject with `SetRand`. Avoid ad‑hoc `rand.*` calls elsewhere.
 
+Decisions run sequentially in row-major cell order, preserving creature order
+within each cell. All decisions are collected before action resolution. This
+keeps random draw allocation and competing intents reproducible without shared
+RNG access from goroutines. Replay requires the same initial world, seed and
+ordered spawn requests; create a fresh `CreatureFactory()` for each world.
+
+## Tick and creation contracts
+
+- At tick entry, remove previously dead creatures without counting another death,
+  then remove living creatures already at their maximum age as age deaths.
+- Apply aging, nutrition and health; remove starvation deaths before decisions.
+  Resolve fights, eating, cloning, movement and sleeping in that order. Only
+  living actors and living fight targets are eligible; a kill is credited once.
+- After actions, remove dead creatures and compute population, age, health and
+  nutrition totals from the survivors, including newborn clones. `TickStats` is
+  reset per call (preserving `Tick`); carnivore totals remain cumulative.
+- Reporting reads completed statistics. `HealthAdded` retains its existing
+  attempted-healing meaning; `Fights` counts distinct participants, while
+  cumulative carnivore fights count participation in executed fights.
+- The creature creation module owns diet-derived and inherited traits, IDs and
+  rune allocation. `createForDiet` creates one ancestor directly; unsupported
+  diets return nil without consuming creation state. `create(parent)` creates
+  inherited clones (or a random-diet ancestor for nil). Use one factory per world.
+
+Domain terms are defined in [CONTEXT.md](CONTEXT.md).
+
 ## Code Layout (Selected Files)
 - `main.go` – entry point & simulation startup.
 - `creatures.go` – creature definitions & state.

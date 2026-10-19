@@ -6,6 +6,8 @@ import (
 
 // TestNextSafeRune verifies that nextSafeRune() returns the expected runes in sequence.
 func TestNextSafeRune(t *testing.T) {
+	oldRunes, oldIndex := safeRunes, nextRuneIndex
+	t.Cleanup(func() { safeRunes, nextRuneIndex = oldRunes, oldIndex })
 	safeRunes = []rune{'α', 'β', 'γ'} // test-safe pool
 	nextRuneIndex = 0                 // reset index
 

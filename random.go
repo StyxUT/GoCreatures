@@ -5,7 +5,8 @@ import (
 	"time"
 )
 
-// Central RNG instance to allow deterministic injection in tests.
+// Central RNG instance to allow deterministic injection in tests. Simulation
+// draws belong to the tick goroutine; terminal input only queues requests.
 var rng *rand.Rand
 
 func init() {
