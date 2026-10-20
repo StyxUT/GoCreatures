@@ -81,3 +81,32 @@ func TestSpiralLook2D_N_EmptyWorldAndInvalidPositionAreSafe(t *testing.T) {
 		t.Fatalf("invalid perception retained stale observations: %+v", creature.observed)
 	}
 }
+
+func TestMapToSortedAncestryStatsKeepsTopFive(t *testing.T) {
+	ancestors := make([]*Creature, 6)
+	counts := make(map[*Creature]int, len(ancestors))
+	for i := range ancestors {
+		ancestors[i] = &Creature{num: i + 1}
+		counts[ancestors[i]] = i + 1
+	}
+	stats := []AncestryStats{{LineageCount: 99}}
+
+	mapToSortedAncestryStats(counts, &stats)
+
+	if len(stats) != 5 {
+		t.Fatalf("got %d ancestry entries, want 5", len(stats))
+	}
+	for i, stat := range stats {
+		if stat.LineageCount != 6-i {
+			t.Errorf("stats[%d].LineageCount = %d, want %d", i, stat.LineageCount, 6-i)
+		}
+	}
+}
+
+func TestMapToSortedAncestryStatsEmptyInput(t *testing.T) {
+	stats := []AncestryStats{{LineageCount: 1}}
+	mapToSortedAncestryStats(nil, &stats)
+	if len(stats) != 0 {
+		t.Fatalf("got %d entries for empty input, want 0", len(stats))
+	}
+}

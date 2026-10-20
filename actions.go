@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"slices"
 )
 
@@ -66,7 +67,7 @@ func reproductionProbability(c *Creature, env [][]environment) float64 {
 	if c.isCarnivore() {
 		return breedingProbability(observablePreyValue(c, env), observableCarnivoreCount(c, env), c.maxNutrition)
 	}
-	return breedingProbability(observablePlantValue(c, env), observableHerbivoreCount(c, env), c.maxNutrition)
+	return breedingProbability(observablePlantValue(c, env), observableHerbivoreCount(c, env), c.maxNutrition) * 0.9
 }
 
 func observableHerbivoreCount(creature *Creature, env [][]environment) int {
@@ -1009,12 +1010,20 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 	})
 
 	remaining := 5.0
+	nutritionCapacity := math.Inf(1)
+	if c.maxNutrition > 0 {
+		nutritionCapacity = maxFloat(float64(c.maxNutrition-c.nutrition)-c.nutritionProgress, 0)
+	}
 	consumed := 0.0
 	var consumedBySpecies [plantSpeciesCount]float64
 	nutritionGain := 0.0
 	for _, index := range order {
 		population := &location.plants[index]
+		yield := plantNutritionalYield(location, PlantSpecies(index))
 		amount := minFloat(maxFloat(population.biomass, 0), remaining)
+		if yield > 0 {
+			amount = minFloat(amount, nutritionCapacity/yield)
+		}
 		if amount == 0 {
 			continue
 		}
@@ -1025,7 +1034,9 @@ func resolveEat(intent ActionIntent, env [][]environment, tickStats *TickStats) 
 		consumed += amount
 		consumedBySpecies[index] += amount
 		remaining -= amount
-		nutritionGain += amount * plantNutritionalYield(location, PlantSpecies(index))
+		gain := amount * yield
+		nutritionGain += gain
+		nutritionCapacity = maxFloat(nutritionCapacity-gain, 0)
 		if remaining <= 0 {
 			break
 		}

@@ -288,7 +288,7 @@ func TestResolveEat(t *testing.T) {
 	resolveEat(intent, env, stats)
 
 	// Assert
-	expectedNutritionGain := 15 * 4
+	expectedNutritionGain := int(16.5 * 4)
 
 	if creature.nutrition != expectedNutritionGain {
 		t.Errorf("expected nutrition to be %d, but got %d", expectedNutritionGain, creature.nutrition)
@@ -360,7 +360,7 @@ func TestCreatureMovesTowardFood(t *testing.T) {
 	// env[y][x]
 	env[1][2].plants[PlantGrass].biomass = 50
 	env[2][2].plants[PlantGrass].biomass = 40
-	env[1][1].plants[PlantGrass].biomass = 29
+	env[1][1].plants[PlantGrass].biomass = 0
 	env[0][0].plants[PlantGrass].biomass = 0
 
 	// Place creature at (1, 1)
@@ -591,6 +591,15 @@ func TestBreedingChanceRespondsGraduallyToFoodAndCompetition(t *testing.T) {
 	}
 	if competedFood >= ampleFood {
 		t.Fatalf("more competitors should reduce breeding chance: alone=%f competed=%f", ampleFood, competedFood)
+	}
+}
+
+func TestHerbivoreReproductionChanceIsReducedByTenPercent(t *testing.T) {
+	creature := &Creature{X: 0, Y: 0, maxNutrition: 500}
+	env := [][]environment{{{plants: [plantSpeciesCount]plantPopulation{{biomass: 1000, nutritionalYield: 15}}, creatureList: []*Creature{creature}}}}
+	base := breedingProbability(observablePlantValue(creature, env), observableHerbivoreCount(creature, env), creature.maxNutrition)
+	if got := reproductionProbability(creature, env); math.Abs(got-base*0.9) > 1e-12 {
+		t.Fatalf("herbivore reproduction chance = %.6f, want 90%% of %.6f", got, base)
 	}
 }
 

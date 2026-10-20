@@ -154,9 +154,9 @@ var plantTraits = [plantSpeciesCount]struct {
 	spreadProbability float64
 	nutrition         float64
 }{
-	{regrowth: 0.088, spreadProbability: 0.02, nutrition: 15},
-	{regrowth: 0.044, spreadProbability: 0.01, nutrition: 20},
-	{regrowth: 0.022, spreadProbability: 0.005, nutrition: 10},
+	{regrowth: 0.0968, spreadProbability: 0.02, nutrition: 16.5},
+	{regrowth: 0.0484, spreadProbability: 0.01, nutrition: 22},
+	{regrowth: 0.0242, spreadProbability: 0.005, nutrition: 11},
 }
 
 // PlantCellAt returns a value snapshot in stable grass, clover, bramble order.
@@ -235,6 +235,7 @@ func main() {
 	var ancestryStats []AncestryStats
 	var carnivoreTotals CarnivoreActionTotals
 	var tickStats TickStats
+	showLeaderboard := false
 
 	tickCh := startTicker(time.Duration(tickIntervalMillis) * time.Millisecond)
 
@@ -244,7 +245,7 @@ func main() {
 			fmt.Print("\r\nExited simulation.")
 			return
 		case <-leaderboardRequestCh:
-			printAncestorLeaderboard(&ancestryStats)
+			showLeaderboard = !showLeaderboard
 		case <-tickCh:
 			processSpawnRequests(env, creatureFac)
 			if atomic.LoadInt32(&paused) == 1 {
@@ -261,12 +262,16 @@ func main() {
 			if err != nil {
 				width = 81
 			}
-			printSelectedReport(&tickStats, &carnivoreTotals, reportView(atomic.LoadInt32(&currentReportView)), width)
+			view := reportView(atomic.LoadInt32(&currentReportView))
+			printSelectedReport(&tickStats, &carnivoreTotals, view, width)
 
-			printAncestorLeaderboard(&ancestryStats)
-			fmt.Print("\r\nPress <space> to pause or 'e' to exit")
-			fmt.Printf("\r\nUp/Down arrows adjust speed (%dms/tick)", currentTickInterval()/time.Millisecond)
-			fmt.Printf("\r\n%s", formatSpawnControlLine(width))
+			if showLeaderboard {
+				printAncestorLeaderboard(&ancestryStats)
+			}
+			if view == reportViewHelp {
+				fmt.Printf("\r\nUp/Down arrows adjust speed (%dms/tick)", currentTickInterval()/time.Millisecond)
+			}
+			fmt.Print("\r\nPress '?' to toggle the help menu")
 
 			if len(ancestryStats) <= 1 {
 				PrintNewestClones(env)

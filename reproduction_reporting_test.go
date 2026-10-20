@@ -125,7 +125,7 @@ func TestTickReportShowsReproductionBlockersAndCumulativeBirthsByDiet(t *testing
 		ProbabilityRejected: 2, OtherActionSelected: 2, CloneIntents: 3,
 		ResolutionSuppressed: 1, Births: 5,
 	}
-	output := captureStdout(t, func() { printTickStats(&stats, nil) })
+	output := captureStdout(t, func() { printReproductionStats(&stats) })
 	for _, expected := range []string{
 		"Reproduction Herbivore | tick evaluated 3 eligible 1",
 		"blocked n/h/a/c/i 2/1/0/0/0",
@@ -166,5 +166,14 @@ func TestReproductionReportReplacesNormalReportWithoutChangingStats(t *testing.T
 	}
 	if *stats != before {
 		t.Fatal("displaying reproduction report changed simulation statistics")
+	}
+}
+
+func TestReproductionReportViewTogglesOff(t *testing.T) {
+	if got := toggledReportView(reportViewNormal, reportViewReproduction); got != reportViewReproduction {
+		t.Fatalf("first r press selected view %v, want reproduction", got)
+	}
+	if got := toggledReportView(reportViewReproduction, reportViewReproduction); got != reportViewNormal {
+		t.Fatalf("second r press selected view %v, want normal", got)
 	}
 }

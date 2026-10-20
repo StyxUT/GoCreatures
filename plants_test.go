@@ -246,8 +246,8 @@ func TestHerbivoreEatsHighestYieldFirstAndTracksFractionalBiomass(t *testing.T) 
 	if math.Abs(stats.PlantBiomassConsumed[PlantGrass]-4.5) > 1e-9 || math.Abs(stats.PlantBiomassConsumed[PlantClover]-0.2) > 1e-9 || math.Abs(stats.PlantBiomassConsumed[PlantBramble]-0.3) > 1e-9 {
 		t.Errorf("per-species grazing = %+v, want grass 4.5 clover 0.2 bramble 0.3", stats.PlantBiomassConsumed)
 	}
-	if creature.nutrition != 74 || creature.nutritionProgress != 0.5 {
-		t.Errorf("nutrition progress = %d + %.2f, want 74 + 0.50", creature.nutrition, creature.nutritionProgress)
+	if creature.nutrition != 81 || math.Abs(creature.nutritionProgress-0.95) > 1e-9 {
+		t.Errorf("nutrition progress = %d + %.2f, want 81 + 0.95", creature.nutrition, creature.nutritionProgress)
 	}
 }
 
@@ -304,8 +304,31 @@ func TestHerbivoreEatingCapsNutritionButAccountsForPartialBiomass(t *testing.T) 
 	if creature.nutrition != 100 || creature.nutritionProgress != 0 {
 		t.Fatalf("nutrition = %d + %.2f, want capped at 100", creature.nutrition, creature.nutritionProgress)
 	}
-	if math.Abs(stats.BiomassConsumed-0.6) > 1e-9 || env[0][0].plants[PlantBramble].biomass != 0 {
+	wantConsumed := 5.0 / plantTraits[PlantBramble].nutrition
+	if math.Abs(stats.BiomassConsumed-wantConsumed) > 1e-9 || math.Abs(env[0][0].plants[PlantBramble].biomass-(0.6-wantConsumed)) > 1e-9 {
 		t.Fatalf("partial biomass accounting mismatch: consumed %.3f, remaining %.3f", stats.BiomassConsumed, env[0][0].plants[PlantBramble].biomass)
+	}
+}
+
+func TestHerbivoreDoesNotGrazeNutritionItCannotUse(t *testing.T) {
+	creature := &Creature{X: 0, Y: 0, nutrition: 99, nutritionProgress: 0.5, maxNutrition: 100}
+	env := [][]environment{{{plants: [plantSpeciesCount]plantPopulation{{}, {biomass: 5, nutritionalYield: 20}}}}}
+	stats := &TickStats{}
+
+	resolveEat(ActionIntent{Creature: creature, Type: "eat"}, env, stats)
+
+	wantConsumed := 0.025
+	if math.Abs(stats.BiomassConsumed-wantConsumed) > 1e-9 {
+		t.Fatalf("biomass consumed = %.6f, want %.6f", stats.BiomassConsumed, wantConsumed)
+	}
+	if math.Abs(env[0][0].plants[PlantClover].biomass-(5-wantConsumed)) > 1e-9 {
+		t.Fatalf("clover biomass = %.6f, want %.6f", env[0][0].plants[PlantClover].biomass, 5-wantConsumed)
+	}
+	if stats.PlantBiomassConsumed[PlantClover] != stats.BiomassConsumed {
+		t.Fatalf("species consumption = %.6f, total consumption = %.6f", stats.PlantBiomassConsumed[PlantClover], stats.BiomassConsumed)
+	}
+	if creature.nutrition != 100 || creature.nutritionProgress != 0 {
+		t.Fatalf("nutrition = %d + %.2f, want 100", creature.nutrition, creature.nutritionProgress)
 	}
 }
 
@@ -469,7 +492,7 @@ func TestPlantEstablishmentMutatesAtMostOneTraitWithinBounds(t *testing.T) {
 		t.Fatalf("daughter mutation changed its parent cohort: %+v", got)
 	}
 	base := plantTraits[PlantGrass]
-	if base.regrowth != 0.088 || base.spreadProbability != 0.02 || base.nutrition != 15 {
+	if base.regrowth != 0.0968 || base.spreadProbability != 0.02 || base.nutrition != 16.5 {
 		t.Fatalf("daughter mutation changed species baselines: %+v", base)
 	}
 }

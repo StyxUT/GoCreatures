@@ -31,9 +31,20 @@ func startKeyListener() {
 				}
 				switch buf[0] {
 				case 'r', 'R':
-					atomic.StoreInt32(&currentReportView, int32(reportViewReproduction))
+					view := toggledReportView(reportView(atomic.LoadInt32(&currentReportView)), reportViewReproduction)
+					atomic.StoreInt32(&currentReportView, int32(view))
+				case 's', 'S':
+					if reportView(atomic.LoadInt32(&currentReportView)) == reportViewStats {
+						atomic.StoreInt32(&currentReportView, int32(reportViewNormal))
+					} else {
+						atomic.StoreInt32(&currentReportView, int32(reportViewStats))
+					}
 				case '?':
-					atomic.StoreInt32(&currentReportView, int32(reportViewHelp))
+					if reportView(atomic.LoadInt32(&currentReportView)) == reportViewHelp {
+						atomic.StoreInt32(&currentReportView, int32(reportViewNormal))
+					} else {
+						atomic.StoreInt32(&currentReportView, int32(reportViewHelp))
+					}
 				case 'l', 'L':
 					select {
 					case leaderboardRequestCh <- struct{}{}:

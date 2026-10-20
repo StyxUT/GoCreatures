@@ -186,23 +186,54 @@ func TestInteractiveHelpReplacesReportAndFitsTerminal(t *testing.T) {
 		}
 	}
 	help := formatInteractiveHelp(81)
-	for _, required := range []string{"Space pause/resume", "Up/Down speed", "'e' exit", "'c' queues Carnivore", "'h' queues Herbivore", "'?' help", "'r' reproduction", "Grass |I", "Clover *o@", "Bramble :xX#"} {
+	for _, required := range []string{"Press <space> to pause or 'e' to exit", "Up/Down arrows adjust speed", "Press 'c' to spawn Carnivore, 'h' to spawn Herbivore", "'r' reproduction", "Grass |I Clover *o@ Bramble :xX#"} {
 		if !strings.Contains(help, required) {
 			t.Errorf("help missing %q: %s", required, help)
 		}
 	}
 	stats := &TickStats{Tick: 4}
 	output := captureStdout(t, func() { printSelectedReport(stats, nil, reportViewHelp, 81) })
-	if !strings.Contains(output, "Space pause/resume") || strings.Contains(output, "Tick:") {
+	if !strings.Contains(output, "Press <space>") || strings.Contains(output, "Tick:") {
 		t.Fatalf("help did not replace normal report: %q", output)
 	}
 }
 
-func TestInteractiveHelpKeepsHelpShortcutLastWhenWrapped(t *testing.T) {
-	for _, width := range []int{20, 40, 81, 120} {
+func TestReportViewsShowOnlyTheirSelectedContent(t *testing.T) {
+	stats := &TickStats{Tick: 23, TotalCreatures: 4}
+	stats.Reproduction[herbivoreReproductionIndex] = ReproductionStats{Evaluated: 3}
+	views := []struct {
+		name  string
+		view  reportView
+		want  string
+		avoid string
+	}{
+		{name: "hidden", view: reportViewNormal, want: "", avoid: "Tick:"},
+		{name: "statistics", view: reportViewStats, want: "Tick: 23", avoid: "Reproduction Herbivore"},
+		{name: "reproduction", view: reportViewReproduction, want: "Reproduction Herbivore | tick evaluated 3", avoid: "Tick:"},
+		{name: "help", view: reportViewHelp, want: "Press <space>", avoid: "Tick:"},
+	}
+	for _, tt := range views {
+		t.Run(tt.name, func(t *testing.T) {
+			before := *stats
+			output := captureStdout(t, func() { printSelectedReport(stats, nil, tt.view, 81) })
+			if tt.want != "" && !strings.Contains(output, tt.want) {
+				t.Errorf("report is missing %q: %q", tt.want, output)
+			}
+			if tt.avoid != "" && strings.Contains(output, tt.avoid) {
+				t.Errorf("report unexpectedly contains %q: %q", tt.avoid, output)
+			}
+			if *stats != before {
+				t.Error("switching report view changed simulation statistics")
+			}
+		})
+	}
+}
+
+func TestInteractiveHelpKeepsPlantLegendOnLastLineWhenWrapped(t *testing.T) {
+	for _, width := range []int{40, 81, 120} {
 		lines := strings.Split(strings.TrimSpace(formatInteractiveHelp(width)), "\r\n")
-		if !strings.HasPrefix(lines[len(lines)-1], "'?' help") {
-			t.Errorf("help shortcut is not final at width %d: %q", width, lines)
+		if !strings.Contains(strings.Join(lines, "\n"), "Grass |I Clover *o@ Bramble :xX#") {
+			t.Errorf("plant legend is missing at width %d: %q", width, lines)
 		}
 	}
 }

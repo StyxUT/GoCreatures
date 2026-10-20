@@ -16,10 +16,11 @@ func collectAncestryStats(env [][]environment, ancestryStats *[]AncestryStats) {
 }
 
 func printTickStats(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals) {
-	fmt.Printf("Tick: %d | TotalDeaths: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d \n\rBiomassAdded: %.2f (regrowth %.2f + recovery %.2f) | BiomassTransferred: %.2f | BiomassConsumed: %.2f | Meat: %.1f | Clones: %d | Eats: %d | Moves: %d | Fights: %d | Sleeps: %d\r\n",
-		tickStats.Tick, tickStats.TotalDeaths, tickStats.AgeDeaths, tickStats.StarvationDeaths, tickStats.FightDeaths, tickStats.BiomassAdded, tickStats.BiomassRegrown, tickStats.BiomassRecovered, tickStats.BiomassTransferred[PlantGrass]+tickStats.BiomassTransferred[PlantClover]+tickStats.BiomassTransferred[PlantBramble], tickStats.BiomassConsumed, tickStats.CarcassEnergyEaten, tickStats.Clones, tickStats.Eats, tickStats.Moves, tickStats.Fights, tickStats.Sleeps)
+	fmt.Printf("Tick: %d | TotalDeaths: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d\r\n",
+		tickStats.Tick, tickStats.TotalDeaths, tickStats.AgeDeaths, tickStats.StarvationDeaths, tickStats.FightDeaths)
 	fmt.Printf("Creatures: %d | Carnivores: %d | Herbivores: %d\r\n", tickStats.TotalCreatures, tickStats.TotalCarnivores, tickStats.TotalHerbivores)
-	fmt.Print(formatReproductionStats(tickStats))
+	fmt.Printf("BiomassAdded: %.2f (regrowth %.2f + recovery %.2f) | BiomassTransferred: %.2f | BiomassConsumed: %.2f | Meat: %.1f | Clones: %d | Eats: %d | Moves: %d | Fights: %d | Sleeps: %d\r\n",
+		tickStats.BiomassAdded, tickStats.BiomassRegrown, tickStats.BiomassRecovered, tickStats.BiomassTransferred[PlantGrass]+tickStats.BiomassTransferred[PlantClover]+tickStats.BiomassTransferred[PlantBramble], tickStats.BiomassConsumed, tickStats.CarcassEnergyEaten, tickStats.Clones, tickStats.Eats, tickStats.Moves, tickStats.Fights, tickStats.Sleeps)
 	fmt.Print(formatPlantStats(tickStats))
 	if carnivoreTotals != nil {
 		fmt.Printf("Carnivore Totals | Eats: %d | Kills: %d | Clones: %d | Moves: %d | Fights: %d | Sleeps: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d\r\n", carnivoreTotals.Eats, carnivoreTotals.Kills, carnivoreTotals.Clones, carnivoreTotals.Moves, carnivoreTotals.Fights, carnivoreTotals.Sleeps, carnivoreTotals.AgeDeaths, carnivoreTotals.StarvationDeaths, carnivoreTotals.FightDeaths)
@@ -36,7 +37,15 @@ const (
 	reportViewNormal reportView = iota
 	reportViewReproduction
 	reportViewHelp
+	reportViewStats
 )
+
+func toggledReportView(current, target reportView) reportView {
+	if current == target {
+		return reportViewNormal
+	}
+	return target
+}
 
 func printSelectedReport(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals, view reportView, width int) {
 	if view == reportViewHelp {
@@ -47,7 +56,9 @@ func printSelectedReport(tickStats *TickStats, carnivoreTotals *CarnivoreActionT
 		printReproductionStats(tickStats)
 		return
 	}
-	printTickStats(tickStats, carnivoreTotals)
+	if view == reportViewStats {
+		printTickStats(tickStats, carnivoreTotals)
+	}
 }
 
 func formatInteractiveHelp(width int) string {
@@ -55,11 +66,11 @@ func formatInteractiveHelp(width int) string {
 		width = 81
 	}
 	paragraphs := []string{
-		"Space pause/resume | Up/Down speed up/slow down | 'e' exit",
-		"'c' queues Carnivore spawn | 'h' queues Herbivore spawn",
-		"'l' ancestor leaderboard | 'r' reproduction report",
-		"Plant legend: Grass |I Clover *o@ Bramble :xX#",
-		"'?' help",
+		"Press <space> to pause or 'e' to exit",
+		"Up/Down arrows adjust speed",
+		"Press 'c' to spawn Carnivore, 'h' to spawn Herbivore",
+		"'s' toggle stats | 'l' toggle ancestor leaderboard | 'r' reproduction report",
+		"Grass |I Clover *o@ Bramble :xX#",
 	}
 	var output strings.Builder
 	for _, paragraph := range paragraphs {
