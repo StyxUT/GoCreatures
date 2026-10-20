@@ -56,10 +56,10 @@ deterministic and uses no simulation randomness.
 ## Starting creatures and predator avoidance
 
 Each cell has a 4.5% initial creature spawn candidate probability.
-Of those candidates, 5% are carnivores and 95% herbivores; half of herbivore
-candidates are skipped. Per-cell starting probabilities are therefore 0.225%
-for carnivores and 2.1375% for herbivores, halving the previous expected
-starting herbivore population. Manual spawns still create one creature.
+Of those candidates, 15% are carnivores and 85% herbivores; half of herbivore
+candidates are skipped. Per-cell starting probabilities are therefore 0.675%
+for carnivores and 1.9125% for herbivores. Manual spawns still create one
+creature.
 
 A mobile herbivore prioritizes escape over fighting, cloning, feeding and
 resting when a neighboring step increases its distance from the nearest known
@@ -171,7 +171,7 @@ parent to daughter colony. Tick-start snapshots prevent same-tick cascades.
 (`BiomassTransferred`), recovery event counts (`PlantRecoveries`), recovered
 biomass (`PlantBiomassRecovered`) and grazing (`BiomassConsumed`) remain separately
 accounted. Only species/location pairs
-with positive biomass at initial seeding have dormant reserves: after 20 ticks
+with positive biomass at initial seeding have dormant reserves: after 10 ticks
 at zero biomass, they can recover up to 5 biomass from a finite 10-biomass
 reserve, subject to shared capacity. Recovery restores baseline traits at
 generation zero and does not count as a daughter establishment. Reserves never

@@ -94,7 +94,7 @@ const (
 const plantCellCapacity = 100.0
 const plantMutationProbability = 0.001
 const plantMutationMagnitude = 0.0025
-const plantRecoveryDelay = 20
+const plantRecoveryDelay = 10
 const plantRecoveryBiomass = 5.0
 const plantRecoveryReserve = 10.0
 
@@ -383,7 +383,7 @@ func initializeMap(rows, cols int, createCreature *creatureFactory) [][]environm
 			}
 
 			diet := DietHerbivore
-			if RandIntn(100) < 5 { // ~5% of initial spawns are carnivores
+			if RandIntn(100) < 15 { // ~15% of initial spawns are carnivores
 				diet = DietCarnivore
 			} else if RandIntn(2) == 0 { // Retain half of initial herbivore candidates.
 				continue

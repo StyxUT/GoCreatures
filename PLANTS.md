@@ -47,7 +47,7 @@ Ordinary regrowth, failed attempts and occupied-target rejection do not mutate.
 When grazing or propagation reduces a local colony to zero, its cohort and
 generation are discarded. Only positive-biomass species/location pairs created
 by initial seeding (center or halo) receive a separate, dormant 10-biomass
-recovery reserve. After 20 ticks at zero biomass, up to 5 reserve biomass
+recovery reserve. After 10 ticks at zero biomass, up to 5 reserve biomass
 recovers, limited by available shared cell capacity. A depleted reserve is never
 replenished; two full recoveries exhaust it. Recovery resets the living cohort
 to baseline traits and generation zero, and is not a daughter establishment.
