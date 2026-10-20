@@ -125,6 +125,24 @@ survived through tick 500 in all five runs in both versions. Replay trajectories
 remain identical per seed; these small-sample results are comparative diagnostics,
 not evidence of stable equilibrium.
 
+## Reproduction diagnostics
+
+Tick reports show separate herbivore and carnivore reproduction counters.
+`Evaluated` counts living creatures when their action decision is collected;
+`Eligible` requires all hard gates (nutrition reserve, health, age window,
+cooldown and mobility) to pass. The blocker counts overlap: one individual may
+increment several of nutrition/health/age/cooldown/immobility in the same tick
+(report abbreviations `n/h/a/c/i`).
+Food is not a hard blocker; `chance rejected/checks` records the local-food
+probability draw, and `other action` counts otherwise eligible decision-makers
+whose higher-priority action prevented that draw. `Clone intents` are successful
+breeding draws, `resolution suppressed` counts those intents that did not append
+an offspring, and `births` counts actual offspring added at action resolution.
+Per-tick evaluations use the post-tick-entry living population; cumulative
+counters sum the per-tick diagnostics, while cumulative births add only at
+successful resolution. Reporting only reads these counters and does not consume
+random values.
+
 ## Plant ecology
 
 Each cell has a shared capacity of 100 biomass units. Founding patches use up to

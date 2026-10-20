@@ -19,10 +19,30 @@ func printTickStats(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals
 	fmt.Printf("Tick: %d | TotalDeaths: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d \n\rBiomassAdded: %.2f | BiomassTransferred: %.2f | BiomassConsumed: %.2f | Meat: %.1f | Clones: %d | Eats: %d | Moves: %d | Fights: %d | Sleeps: %d\r\n",
 		tickStats.Tick, tickStats.TotalDeaths, tickStats.AgeDeaths, tickStats.StarvationDeaths, tickStats.FightDeaths, tickStats.BiomassAdded, tickStats.BiomassTransferred[PlantGrass]+tickStats.BiomassTransferred[PlantClover]+tickStats.BiomassTransferred[PlantBramble], tickStats.BiomassConsumed, tickStats.CarcassEnergyEaten, tickStats.Clones, tickStats.Eats, tickStats.Moves, tickStats.Fights, tickStats.Sleeps)
 	fmt.Printf("Creatures: %d | Carnivores: %d | Herbivores: %d\r\n", tickStats.TotalCreatures, tickStats.TotalCarnivores, tickStats.TotalHerbivores)
+	fmt.Print(formatReproductionStats(tickStats))
 	fmt.Print(formatPlantStats(tickStats))
 	if carnivoreTotals != nil {
 		fmt.Printf("Carnivore Totals | Eats: %d | Kills: %d | Clones: %d | Moves: %d | Fights: %d | Sleeps: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d\r\n", carnivoreTotals.Eats, carnivoreTotals.Kills, carnivoreTotals.Clones, carnivoreTotals.Moves, carnivoreTotals.Fights, carnivoreTotals.Sleeps, carnivoreTotals.AgeDeaths, carnivoreTotals.StarvationDeaths, carnivoreTotals.FightDeaths)
 	}
+}
+
+func formatReproductionStats(stats *TickStats) string {
+	names := [reproductionDietCount]string{"Herbivore", "Carnivore"}
+	var output strings.Builder
+	for diet, name := range names {
+		current, total := stats.Reproduction[diet], stats.ReproductionCumulative[diet]
+		fmt.Fprintf(&output,
+			"Reproduction %s | tick evaluated %d eligible %d blocked n/h/a/c/i %d/%d/%d/%d/%d chance rejected %d/%d other %d intents/suppressed/births %d/%d/%d | total evaluated %d eligible %d blocked %d/%d/%d/%d/%d chance %d/%d other %d intents/suppressed/births %d/%d/%d\r\n",
+			name, current.Evaluated, current.Eligible,
+			current.NutritionBlocked, current.HealthBlocked, current.AgeBlocked, current.CooldownBlocked, current.ImmobilityBlocked,
+			current.ProbabilityRejected, current.ProbabilityChecks, current.OtherActionSelected,
+			current.CloneIntents, current.ResolutionSuppressed, current.Births,
+			total.Evaluated, total.Eligible,
+			total.NutritionBlocked, total.HealthBlocked, total.AgeBlocked, total.CooldownBlocked, total.ImmobilityBlocked,
+			total.ProbabilityRejected, total.ProbabilityChecks, total.OtherActionSelected,
+			total.CloneIntents, total.ResolutionSuppressed, total.Births)
+	}
+	return output.String()
 }
 
 func formatSpawnControlLine(width int) string {

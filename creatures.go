@@ -8,28 +8,29 @@ const (
 )
 
 type Creature struct {
-	num               int
-	parent            *Creature
-	ancestor          *Creature
-	generation        int
-	char              rune
-	colorCode         string
-	health            int
-	maxHealth         int
-	X, Y              int
-	age               int
-	maxAge            int
-	immobileTicks     int
-	cloneCooldown     int
-	handlingTicks     int
-	metabolism        int
-	nutrition         int
-	nutritionProgress float64
-	maxNutrition      int
-	diet              DietType
-	aggression        int
-	vision            float64
-	observed          []ObservedLocation
+	num                  int
+	parent               *Creature
+	ancestor             *Creature
+	generation           int
+	char                 rune
+	colorCode            string
+	health               int
+	maxHealth            int
+	X, Y                 int
+	age                  int
+	maxAge               int
+	immobileTicks        int
+	cloneCooldown        int
+	handlingTicks        int
+	reproductionDecision reproductionDecisionState
+	metabolism           int
+	nutrition            int
+	nutritionProgress    float64
+	maxNutrition         int
+	diet                 DietType
+	aggression           int
+	vision               float64
+	observed             []ObservedLocation
 }
 
 type ActionIntent struct {
@@ -177,11 +178,18 @@ func (c *Creature) isCarnivore() bool {
 
 // Collect decisions in world order before resolving any actions. Keeping random
 // draws on the tick goroutine makes both draw allocation and intent order stable.
-func collectIntents(creatures []*Creature, env [][]environment) []ActionIntent {
+func collectIntents(creatures []*Creature, env [][]environment, tickStats ...*TickStats) []ActionIntent {
 	intents := make([]ActionIntent, 0, len(creatures))
+	var stats *TickStats
+	if len(tickStats) > 0 {
+		stats = tickStats[0]
+	}
 	for _, c := range creatures {
 		if c.health > 0 {
-			intents = append(intents, c.decideAction(env))
+			c.reproductionDecision = reproductionDecisionState{}
+			intent := c.decideAction(env)
+			intents = append(intents, intent)
+			recordReproductionDecision(c, intent, stats)
 		}
 	}
 	return intents

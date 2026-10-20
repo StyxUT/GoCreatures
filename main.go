@@ -13,37 +13,39 @@ import (
 )
 
 type TickStats struct {
-	Tick                 int
-	TotalCreatures       int
-	TotalCarnivores      int
-	TotalHerbivores      int
-	TotalDeaths          int
-	AgeDeaths            int
-	StarvationDeaths     int
-	FightDeaths          int
-	TotalAge             int
-	TotalHealth          int
-	TotalNutrition       int
-	Clones               int
-	Eats                 int
-	Moves                int
-	Fights               int
-	Sleeps               int
-	BiomassAdded         float64
-	HealthAdded          int
-	BiomassConsumed      float64
-	BiomassTransferred   [plantSpeciesCount]float64
-	PlantBiomassConsumed [plantSpeciesCount]float64
-	PlantBiomass         [plantSpeciesCount]float64
-	PlantOccupiedCells   [plantSpeciesCount]int
-	PlantEstablishments  [plantSpeciesCount]int
-	PlantMutations       [plantSpeciesCount]int
-	PlantTraits          [plantSpeciesCount]PlantTraitSummary
-	PlantCapacity        float64
-	PlantCumulative      PlantCumulativeTotals
-	CarcassesCreated     int
-	CarcassEnergyCreated float64
-	CarcassEnergyEaten   float64
+	Tick                   int
+	TotalCreatures         int
+	TotalCarnivores        int
+	TotalHerbivores        int
+	TotalDeaths            int
+	AgeDeaths              int
+	StarvationDeaths       int
+	FightDeaths            int
+	TotalAge               int
+	TotalHealth            int
+	TotalNutrition         int
+	Clones                 int
+	Eats                   int
+	Moves                  int
+	Fights                 int
+	Sleeps                 int
+	BiomassAdded           float64
+	HealthAdded            int
+	BiomassConsumed        float64
+	BiomassTransferred     [plantSpeciesCount]float64
+	PlantBiomassConsumed   [plantSpeciesCount]float64
+	PlantBiomass           [plantSpeciesCount]float64
+	PlantOccupiedCells     [plantSpeciesCount]int
+	PlantEstablishments    [plantSpeciesCount]int
+	PlantMutations         [plantSpeciesCount]int
+	PlantTraits            [plantSpeciesCount]PlantTraitSummary
+	PlantCapacity          float64
+	PlantCumulative        PlantCumulativeTotals
+	CarcassesCreated       int
+	CarcassEnergyCreated   float64
+	CarcassEnergyEaten     float64
+	Reproduction           [reproductionDietCount]ReproductionStats
+	ReproductionCumulative [reproductionDietCount]ReproductionStats
 }
 
 type PlantTraitSummary struct {
@@ -424,7 +426,8 @@ func seedPlants(env [][]environment) {
 func simulateTick(env [][]environment, creatureFac func(*Creature) *Creature, tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals) {
 	// Per-tick values reset; plant cumulative totals survive across calls.
 	cumulativePlants := tickStats.PlantCumulative
-	*tickStats = TickStats{Tick: tickStats.Tick, PlantCumulative: cumulativePlants}
+	cumulativeReproduction := tickStats.ReproductionCumulative
+	*tickStats = TickStats{Tick: tickStats.Tick, PlantCumulative: cumulativePlants, ReproductionCumulative: cumulativeReproduction}
 	processEnvironment(env, tickStats, carnivoreTotals)
 	creatures := flattenCreatureList(env)
 	for _, c := range creatures {
@@ -443,7 +446,7 @@ func simulateTick(env [][]environment, creatureFac func(*Creature) *Creature, ti
 	}
 	removeDeadCreatures(env)
 	creatures = flattenCreatureList(env)
-	intents := collectIntents(creatures, env)
+	intents := collectIntents(creatures, env, tickStats)
 	resolveActions(intents, env, creatureFac, tickStats, carnivoreTotals)
 	removeDeadCreatures(env)
 	remaining := flattenCreatureList(env)
@@ -501,6 +504,9 @@ func simulateTick(env [][]environment, creatureFac func(*Creature) *Creature, ti
 		tickStats.PlantCumulative.Mutations[species] += tickStats.PlantMutations[species]
 	}
 	tickStats.PlantCumulative.BiomassAdded += tickStats.BiomassAdded
+	for diet := 0; diet < reproductionDietCount; diet++ {
+		addReproductionStats(&tickStats.ReproductionCumulative[diet], tickStats.Reproduction[diet])
+	}
 }
 
 func printMap(env [][]environment) {

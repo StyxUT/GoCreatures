@@ -282,7 +282,7 @@ func decideHerbivoreAction(c *Creature, env [][]environment, location environmen
 		}
 	}
 
-	if canReproduce(c, env, pctHealth, pctAge) && pctNutrition > herbivoreCriticalHungerPercent && RandFloat64() < reproductionProbability(c, env) {
+	if pctNutrition > herbivoreCriticalHungerPercent && tryReproduce(c, env, pctHealth, pctAge) {
 		return ActionIntent{Creature: c, Type: "clone"}
 	}
 
@@ -376,7 +376,7 @@ func decideCarnivoreAction(c *Creature, env [][]environment, location environmen
 			return ActionIntent{Creature: c, Type: "fight", TargetCreature: adjacentTarget}
 		}
 	}
-	if canReproduce(c, env, pctHealth, pctAge) && pctNutrition > carnivoreCriticalNutrition && RandFloat64() < reproductionProbability(c, env) {
+	if pctNutrition > carnivoreCriticalNutrition && tryReproduce(c, env, pctHealth, pctAge) {
 		return ActionIntent{Creature: c, Type: "clone"}
 	}
 
@@ -767,12 +767,22 @@ func resolveActions(intents []ActionIntent, env [][]environment, creatureFac fun
 	}
 
 	for _, intent := range cloneIntents {
-		if !fought[intent.Creature] {
-			tickStats.Clones++
-			if carnivoreTotals != nil && intent.Creature.isCarnivore() {
-				carnivoreTotals.Clones++
-			}
-			resolveClone(intent, env, creatureFac)
+		if fought[intent.Creature] || intent.Creature.health <= 0 {
+			tickStats.Reproduction[reproductionDietIndex(intent.Creature)].ResolutionSuppressed++
+			continue
+		}
+		tickStats.Clones++
+		if carnivoreTotals != nil && intent.Creature.isCarnivore() {
+			carnivoreTotals.Clones++
+		}
+		cell := &env[intent.Creature.Y][intent.Creature.X]
+		creaturesBefore := len(cell.creatureList)
+		resolveClone(intent, env, creatureFac)
+		diagnostics := &tickStats.Reproduction[reproductionDietIndex(intent.Creature)]
+		if len(cell.creatureList) > creaturesBefore {
+			diagnostics.Births++
+		} else {
+			diagnostics.ResolutionSuppressed++
 		}
 	}
 
