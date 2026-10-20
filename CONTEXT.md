@@ -55,9 +55,11 @@ deterministic and uses no simulation randomness.
 
 ## Starting creatures and predator avoidance
 
-Each cell has a 4.5% initial creature spawn probability (half the previous 9%).
-Of those spawns, 5% are carnivores and 95% herbivores, halving the expected
-starting population of each diet. Manual spawns still create one creature.
+Each cell has a 4.5% initial creature spawn candidate probability.
+Of those candidates, 5% are carnivores and 95% herbivores; half of herbivore
+candidates are skipped. Per-cell starting probabilities are therefore 0.225%
+for carnivores and 2.1375% for herbivores, halving the previous expected
+starting herbivore population. Manual spawns still create one creature.
 
 A mobile herbivore prioritizes escape over fighting, cloning, feeding and
 resting when a neighboring step increases its distance from the nearest known

@@ -373,13 +373,15 @@ func initializeMap(rows, cols int, createCreature *creatureFactory) [][]environm
 		matrix[i] = make([]environment, cols)
 		for j := range matrix[i] {
 			matrix[i][j].capacity = plantCellCapacity
-			if RandIntn(1000) >= 45 { // 4.5% initial spawn rate; halve both diets
+			if RandIntn(1000) >= 45 { // 4.5% initial spawn candidate rate
 				continue
 			}
 
 			diet := DietHerbivore
 			if RandIntn(100) < 5 { // ~5% of initial spawns are carnivores
 				diet = DietCarnivore
+			} else if RandIntn(2) == 0 { // Retain half of initial herbivore candidates.
+				continue
 			}
 
 			c := createCreature.createForDiet(diet)
