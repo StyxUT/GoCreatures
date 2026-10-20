@@ -95,10 +95,14 @@ func TestPrintTickStatsReportsConsumedCarcassEnergy(t *testing.T) {
 
 func TestPrintTickStatsReportsEcologySnapshotAndCumulativeEvents(t *testing.T) {
 	stats := TickStats{
-		PlantBiomass:        [plantSpeciesCount]float64{42, 25, 10},
-		PlantOccupiedCells:  [plantSpeciesCount]int{3, 2, 1},
-		PlantEstablishments: [plantSpeciesCount]int{2, 1, 0},
-		PlantMutations:      [plantSpeciesCount]int{1, 0, 0},
+		PlantBiomass:          [plantSpeciesCount]float64{42, 25, 10},
+		PlantOccupiedCells:    [plantSpeciesCount]int{3, 2, 1},
+		PlantEstablishments:   [plantSpeciesCount]int{2, 1, 0},
+		PlantMutations:        [plantSpeciesCount]int{1, 0, 0},
+		PlantRecoveries:       [plantSpeciesCount]int{2, 0, 0},
+		PlantBiomassRecovered: [plantSpeciesCount]float64{1.5, 0, 0},
+		BiomassAdded:          1.5,
+		BiomassRecovered:      1.5,
 		PlantTraits: [plantSpeciesCount]PlantTraitSummary{
 			{RegrowthRate: 0.080123, SpreadProbability: 0.020123, NutritionalYield: 15.125},
 		},
@@ -109,7 +113,8 @@ func TestPrintTickStatsReportsEcologySnapshotAndCumulativeEvents(t *testing.T) {
 	}
 	output := captureStdout(t, func() { printTickStats(&stats, nil) })
 	for _, want := range []string{
-		"Grass: 42.00 (3 cells)", "established 2", "mutations 1",
+		"BiomassAdded: 1.50 (regrowth 0.00 + recovery 1.50)",
+		"Grass: 42.00 (3 cells)", "established 2", "mutations 1", "recovered 2 events / 1.50",
 		"regrowth 0.080123", "spread 0.020123", "yield 15.125",
 		"Cumulative establishments: grass 7, clover 4, bramble 2",
 	} {

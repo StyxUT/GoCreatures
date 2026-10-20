@@ -27,10 +27,115 @@ func TestSeededWorldStartsWithAllPlantSpeciesWithinSharedCapacity(t *testing.T) 
 		if plant.Biomass <= 0 {
 			t.Errorf("species %v was not seeded", plant.Species)
 		}
+		if !plant.RecoveryEligible || plant.RecoveryReserve <= 0 {
+			t.Errorf("seeded species %v has no dormant recovery reserve: %+v", plant.Species, plant)
+		}
 		biomass += plant.Biomass
 	}
 	if biomass > state.Capacity {
 		t.Fatalf("combined biomass %.2f exceeds capacity %.2f", biomass, state.Capacity)
+	}
+}
+
+func TestOnlyOriginalSeedLocationsRecoverAfterDelay(t *testing.T) {
+	ResetRand(41)
+	env := make([][]environment, 1)
+	env[0] = []environment{{capacity: plantCellCapacity}}
+	seedPlants(env)
+	env[0][0].plants[PlantClover] = plantPopulation{}
+	env[0][0].plants[PlantBramble] = plantPopulation{}
+	plant := &env[0][0].plants[PlantGrass]
+	stats := &TickStats{}
+	herbivore := &Creature{maxNutrition: 100}
+	for plant.biomass > 0 {
+		resolveEat(ActionIntent{Creature: herbivore, Type: "eat"}, env, stats)
+	}
+	if !plant.recoveryEligible || plant.recoveryReserve != plantRecoveryReserve {
+		t.Fatalf("complete grazing discarded recovery metadata: %+v", plant)
+	}
+	runTick := func() { simulateTick(env, func(*Creature) *Creature { return nil }, stats, nil) }
+
+	for tick := 0; tick < plantRecoveryDelay-1; tick++ {
+		runTick()
+		if plant.biomass > 0 {
+			t.Fatalf("grass recovered before delay at tick %d", tick+1)
+		}
+	}
+	runTick()
+	state, _ := PlantCellAt(env, 0, 0)
+	if state.Plants[PlantGrass].Biomass != plantRecoveryBiomass || state.Plants[PlantGrass].Generation != 0 {
+		t.Fatalf("seeded grass did not recover as a founder cohort: %+v", state.Plants[PlantGrass])
+	}
+	if stats.BiomassRecovered != plantRecoveryBiomass || stats.PlantBiomassRecovered[PlantGrass] != plantRecoveryBiomass {
+		t.Fatalf("recovery was not separately reported: %+v", stats)
+	}
+	if stats.PlantRecoveries[PlantGrass] != 1 || stats.PlantCumulative.Recoveries[PlantGrass] != 1 {
+		t.Fatalf("recovery event was not separately reported: %+v", stats)
+	}
+	if stats.BiomassTransferred[PlantGrass] != 0 || stats.PlantEstablishments[PlantGrass] != 0 {
+		t.Fatalf("recovery was misreported as a transfer or daughter establishment: %+v", stats)
+	}
+	if stats.PlantCumulative.BiomassRecovered[PlantGrass] != plantRecoveryBiomass || math.Abs(stats.BiomassAdded-stats.BiomassRegrown-stats.BiomassRecovered) > 1e-9 {
+		t.Fatalf("recovery mass balance was not retained in cumulative reporting: %+v", stats)
+	}
+	if !state.Plants[PlantGrass].RecoveryEligible || state.Plants[PlantGrass].RecoveryReserve != plantRecoveryReserve-plantRecoveryBiomass {
+		t.Fatalf("recovery did not consume the dormant reserve: %+v", state.Plants[PlantGrass])
+	}
+	for _, species := range []PlantSpecies{PlantClover, PlantBramble} {
+		if state.Plants[species].Present || state.Plants[species].RecoveryEligible {
+			t.Fatalf("grass recovery enabled another species %v: %+v", species, state.Plants[species])
+		}
+	}
+}
+
+func TestOriginalSeedRecoveryReserveIsFinite(t *testing.T) {
+	ResetRand(41)
+	env := [][]environment{{{capacity: plantCellCapacity}}}
+	seedPlants(env)
+	plant := &env[0][0].plants[PlantGrass]
+	stats := &TickStats{}
+
+	for recovery := 0; recovery < 2; recovery++ {
+		clearLivingPlant(plant)
+		for tick := 0; tick < plantRecoveryDelay; tick++ {
+			processEnvironment(env, stats, nil)
+		}
+		if plant.biomass != plantRecoveryBiomass {
+			t.Fatalf("recovery %d biomass = %.2f, want %.2f", recovery+1, plant.biomass, plantRecoveryBiomass)
+		}
+	}
+	clearLivingPlant(plant)
+	for tick := 0; tick < plantRecoveryDelay*2; tick++ {
+		processEnvironment(env, stats, nil)
+	}
+	state, _ := PlantCellAt(env, 0, 0)
+	if state.Plants[PlantGrass].Biomass != 0 || state.Plants[PlantGrass].RecoveryReserve != 0 {
+		t.Fatalf("exhausted recovery reserve produced biomass: %+v", state.Plants[PlantGrass])
+	}
+}
+
+func TestSeedRecoveryWaitsForSharedCellCapacity(t *testing.T) {
+	env := [][]environment{{{capacity: plantCellCapacity}}}
+	seedPlants(env)
+	grass := &env[0][0].plants[PlantGrass]
+	clearLivingPlant(grass)
+	env[0][0].plants[PlantClover].biomass = 80
+	env[0][0].plants[PlantBramble].biomass = 20
+	for tick := 0; tick < plantRecoveryDelay; tick++ {
+		processEnvironment(env, &TickStats{}, nil)
+	}
+	if grass.biomass != 0 {
+		t.Fatalf("grass recovered into a full cell: %.2f", grass.biomass)
+	}
+	env[0][0].plants[PlantClover].biomass -= plantRecoveryBiomass
+	processEnvironment(env, &TickStats{}, nil)
+	state, _ := PlantCellAt(env, 0, 0)
+	biomass := 0.0
+	for _, plant := range state.Plants {
+		biomass += plant.Biomass
+	}
+	if state.Plants[PlantGrass].Biomass <= 0 || biomass > state.Capacity+1e-9 {
+		t.Fatalf("recovery did not use available shared capacity safely: total %.4f state %+v", biomass, state)
 	}
 }
 
@@ -285,11 +390,22 @@ func TestNewPlantColonyInheritsItsParentsTraitsAndGeneration(t *testing.T) {
 		t.Fatal("expected grass colony to establish at its selected neighbor")
 	}
 	colony := child.Plants[PlantGrass]
+	if colony.RecoveryEligible || colony.RecoveryReserve != 0 {
+		t.Fatalf("spread daughter inherited recovery permission: %+v", colony)
+	}
 	if colony.Generation != parent.generation+1 {
 		t.Fatalf("daughter generation = %d, want %d", colony.Generation, parent.generation+1)
 	}
 	if colony.RegrowthRate != parent.regrowthRate || colony.SpreadProbability != parent.spreadProbability || colony.NutritionalYield != parent.nutritionalYield {
 		t.Fatalf("daughter did not inherit parent traits: %+v", colony)
+	}
+	clearLivingPlant(&env[1][1].plants[PlantGrass])
+	clearLivingPlant(&env[1][2].plants[PlantGrass])
+	for tick := 0; tick < plantRecoveryDelay*2; tick++ {
+		processEnvironment(env, &TickStats{}, nil)
+	}
+	if env[1][1].plants[PlantGrass].biomass != 0 || env[1][2].plants[PlantGrass].biomass != 0 {
+		t.Fatal("depleted spread colony recovered without an original seed reserve")
 	}
 }
 
@@ -531,6 +647,7 @@ func TestExtinctColonyLosesItsTraitsAndRecolonizesFromNewParent(t *testing.T) {
 		{capacity: plantCellCapacity, plants: [plantSpeciesCount]plantPopulation{{
 			biomass: 0.5, generation: 7, regrowthRate: 0.081,
 			spreadProbability: 0.021, nutritionalYield: 15.1,
+			recoveryEligible: true, recoveryReserve: plantRecoveryReserve,
 		}}},
 		{capacity: plantCellCapacity},
 	}}
@@ -542,6 +659,9 @@ func TestExtinctColonyLosesItsTraitsAndRecolonizesFromNewParent(t *testing.T) {
 	}
 	if grass.RegrowthRate != plantTraits[PlantGrass].regrowth || grass.SpreadProbability != plantTraits[PlantGrass].spreadProbability || grass.NutritionalYield != plantTraits[PlantGrass].nutrition {
 		t.Fatalf("extinct colony retained non-founder traits: %+v", grass)
+	}
+	if !grass.RecoveryEligible || grass.RecoveryReserve != plantRecoveryReserve {
+		t.Fatalf("clearing the live colony discarded dormant metadata: %+v", grass)
 	}
 
 	parent := plantPopulation{
@@ -555,6 +675,9 @@ func TestExtinctColonyLosesItsTraitsAndRecolonizesFromNewParent(t *testing.T) {
 	child := recolonized.Plants[PlantGrass]
 	if !child.Present || child.Generation != parent.generation+1 || child.RegrowthRate != parent.regrowthRate || child.SpreadProbability != parent.spreadProbability || child.NutritionalYield != parent.nutritionalYield {
 		t.Fatalf("recolonized plant did not inherit new parent's traits: %+v", child)
+	}
+	if !child.RecoveryEligible || child.RecoveryReserve != plantRecoveryReserve || child.DormantTicks != 0 {
+		t.Fatalf("recolonization lost or incorrectly advanced the dormant reserve: %+v", child)
 	}
 }
 

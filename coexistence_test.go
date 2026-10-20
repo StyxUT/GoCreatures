@@ -7,7 +7,7 @@ import (
 )
 
 func TestSeededCoexistenceDiagnostic(t *testing.T) {
-	run := func(seed int64) string {
+	run := func(seed int64, recoveryEnabled bool) string {
 		ResetRand(seed)
 		env := make([][]environment, 7)
 		for y := range env {
@@ -17,6 +17,16 @@ func TestSeededCoexistenceDiagnostic(t *testing.T) {
 			}
 		}
 		seedPlants(env)
+		if !recoveryEnabled {
+			for y := range env {
+				for x := range env[y] {
+					for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
+						env[y][x].plants[species].recoveryEligible = false
+						env[y][x].plants[species].recoveryReserve = 0
+					}
+				}
+			}
+		}
 		for i := 0; i < 8; i++ {
 			diet := DietHerbivore
 			if i < 2 {
@@ -82,10 +92,16 @@ func TestSeededCoexistenceDiagnostic(t *testing.T) {
 	}
 
 	for _, seed := range []int64{5, 23, 91, 2026, 9127} {
-		first := run(seed)
-		if replay := run(seed); replay != first {
-			t.Fatalf("seed %d was not repeatable", seed)
+		for _, recoveryEnabled := range []bool{false, true} {
+			first := run(seed, recoveryEnabled)
+			if replay := run(seed, recoveryEnabled); replay != first {
+				t.Fatalf("seed %d (recovery enabled %t) was not repeatable", seed, recoveryEnabled)
+			}
+			mode := "baseline without recovery"
+			if recoveryEnabled {
+				mode = "with recovery"
+			}
+			t.Logf("seed %d %s trajectory:\n%s", seed, mode, first)
 		}
-		t.Logf("seed %d trajectory:\n%s", seed, first)
 	}
 }

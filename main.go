@@ -30,10 +30,14 @@ type TickStats struct {
 	Fights                 int
 	Sleeps                 int
 	BiomassAdded           float64
+	BiomassRegrown         float64
+	BiomassRecovered       float64
 	HealthAdded            int
 	BiomassConsumed        float64
 	BiomassTransferred     [plantSpeciesCount]float64
 	PlantBiomassConsumed   [plantSpeciesCount]float64
+	PlantRecoveries        [plantSpeciesCount]int
+	PlantBiomassRecovered  [plantSpeciesCount]float64
 	PlantBiomass           [plantSpeciesCount]float64
 	PlantOccupiedCells     [plantSpeciesCount]int
 	PlantEstablishments    [plantSpeciesCount]int
@@ -56,6 +60,9 @@ type PlantTraitSummary struct {
 
 type PlantCumulativeTotals struct {
 	BiomassAdded       float64
+	BiomassRegrown     float64
+	BiomassRecovered   [plantSpeciesCount]float64
+	Recoveries         [plantSpeciesCount]int
 	BiomassTransferred [plantSpeciesCount]float64
 	BiomassConsumed    [plantSpeciesCount]float64
 	Establishments     [plantSpeciesCount]int
@@ -87,6 +94,9 @@ const (
 const plantCellCapacity = 100.0
 const plantMutationProbability = 0.001
 const plantMutationMagnitude = 0.0025
+const plantRecoveryDelay = 20
+const plantRecoveryBiomass = 5.0
+const plantRecoveryReserve = 10.0
 
 var plantSpread = [plantSpeciesCount]struct {
 	threshold float64
@@ -106,6 +116,9 @@ type PlantState struct {
 	RegrowthRate      float64
 	SpreadProbability float64
 	NutritionalYield  float64
+	RecoveryEligible  bool
+	RecoveryReserve   float64
+	DormantTicks      int
 }
 
 type PlantCellState struct {
@@ -120,6 +133,9 @@ type plantPopulation struct {
 	regrowthRate      float64
 	spreadProbability float64
 	nutritionalYield  float64
+	recoveryEligible  bool
+	recoveryReserve   float64
+	dormantTicks      int
 }
 
 type environment struct {
@@ -172,6 +188,9 @@ func PlantCellAt(env [][]environment, x, y int) (PlantCellState, bool) {
 			RegrowthRate:      regrowthRate,
 			SpreadProbability: spreadProbability,
 			NutritionalYield:  nutritionalYield,
+			RecoveryEligible:  population.recoveryEligible,
+			RecoveryReserve:   population.recoveryReserve,
+			DormantTicks:      population.dormantTicks,
 		}
 	}
 	return state, true
@@ -417,6 +436,8 @@ func seedPlants(env [][]environment) {
 					regrowthRate:      plantTraits[species].regrowth,
 					spreadProbability: plantTraits[species].spreadProbability,
 					nutritionalYield:  plantTraits[species].nutrition,
+					recoveryEligible:  biomass*scale > 0,
+					recoveryReserve:   recoveryReserveFor(biomass * scale),
 				}
 			}
 		}
@@ -499,11 +520,14 @@ func simulateTick(env [][]environment, creatureFac func(*Creature) *Creature, ti
 			tickStats.PlantTraits[species].NutritionalYield /= biomass
 		}
 		tickStats.PlantCumulative.BiomassTransferred[species] += tickStats.BiomassTransferred[species]
+		tickStats.PlantCumulative.BiomassRecovered[species] += tickStats.PlantBiomassRecovered[species]
+		tickStats.PlantCumulative.Recoveries[species] += tickStats.PlantRecoveries[species]
 		tickStats.PlantCumulative.BiomassConsumed[species] += tickStats.PlantBiomassConsumed[species]
 		tickStats.PlantCumulative.Establishments[species] += tickStats.PlantEstablishments[species]
 		tickStats.PlantCumulative.Mutations[species] += tickStats.PlantMutations[species]
 	}
 	tickStats.PlantCumulative.BiomassAdded += tickStats.BiomassAdded
+	tickStats.PlantCumulative.BiomassRegrown += tickStats.BiomassRegrown
 	for diet := 0; diet < reproductionDietCount; diet++ {
 		addReproductionStats(&tickStats.ReproductionCumulative[diet], tickStats.Reproduction[diet])
 	}
@@ -590,7 +614,11 @@ func processEnvironment(env [][]environment, tickStats *TickStats, carnivoreTota
 	update := updatePlants(env)
 	if tickStats != nil {
 		tickStats.BiomassAdded += update.biomassAdded
+		tickStats.BiomassRegrown += update.regrown
 		for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
+			tickStats.PlantBiomassRecovered[species] += update.recovered[species]
+			tickStats.PlantRecoveries[species] += update.recoveries[species]
+			tickStats.BiomassRecovered += update.recovered[species]
 			tickStats.BiomassTransferred[species] += update.transferred[species]
 			tickStats.PlantEstablishments[species] += update.establishments[species]
 			tickStats.PlantMutations[species] += update.mutations[species]
@@ -631,6 +659,9 @@ type plantSpreadIntent struct {
 
 type plantUpdateResult struct {
 	biomassAdded   float64
+	regrown        float64
+	recoveries     [plantSpeciesCount]int
+	recovered      [plantSpeciesCount]float64
 	transferred    [plantSpeciesCount]float64
 	establishments [plantSpeciesCount]int
 	mutations      [plantSpeciesCount]int
@@ -668,7 +699,16 @@ func updatePlants(env [][]environment) plantUpdateResult {
 
 	for y := range env {
 		for x := range env[y] {
-			result.biomassAdded += regrowPlants(&env[y][x])
+			regrown := regrowPlants(&env[y][x])
+			result.regrown += regrown
+			result.biomassAdded += regrown
+			for species, amount := range recoverPlants(&env[y][x]) {
+				result.recovered[species] += amount
+				if amount > 0 {
+					result.recoveries[species]++
+				}
+				result.biomassAdded += amount
+			}
 		}
 	}
 	slices.SortFunc(intents, func(a, b plantSpreadIntent) int {
@@ -714,8 +754,12 @@ func updatePlants(env [][]environment) plantUpdateResult {
 		child, mutated := inheritPlantColonyWithMutation(source.plants[intent.species], intent.species)
 		source.plants[intent.species].biomass--
 		if source.plants[intent.species].biomass <= 1e-12 {
-			source.plants[intent.species] = plantPopulation{}
+			clearLivingPlant(&source.plants[intent.species])
 		}
+		founder := target.plants[intent.species]
+		child.recoveryEligible = founder.recoveryEligible
+		child.recoveryReserve = founder.recoveryReserve
+		child.dormantTicks = 0
 		target.plants[intent.species] = child
 		result.transferred[intent.species]++
 		result.establishments[intent.species]++
@@ -842,6 +886,67 @@ func regrowPlants(cell *environment) float64 {
 		allocated += share
 	}
 	return growth
+}
+
+func recoveryReserveFor(initialBiomass float64) float64 {
+	if initialBiomass <= 0 {
+		return 0
+	}
+	return plantRecoveryReserve
+}
+
+func recoverPlants(cell *environment) [plantSpeciesCount]float64 {
+	var recovered [plantSpeciesCount]float64
+	if cell == nil || cell.capacity <= 0 {
+		return recovered
+	}
+	totalBiomass := 0.0
+	for _, population := range cell.plants {
+		totalBiomass += maxFloat(population.biomass, 0)
+	}
+	freeCapacity := maxFloat(cell.capacity-totalBiomass, 0)
+	for species := PlantSpecies(0); species < plantSpeciesCount; species++ {
+		population := &cell.plants[species]
+		if !population.recoveryEligible || population.biomass > 0 || population.recoveryReserve <= 0 {
+			continue
+		}
+		if population.dormantTicks < plantRecoveryDelay {
+			population.dormantTicks++
+		}
+		if population.dormantTicks < plantRecoveryDelay || freeCapacity <= 0 {
+			continue
+		}
+		amount := minFloat(plantRecoveryBiomass, minFloat(population.recoveryReserve, freeCapacity))
+		if amount <= 0 {
+			continue
+		}
+		traits := plantTraits[species]
+		population.biomass = amount
+		population.generation = 0
+		population.growthProgress = 0
+		population.regrowthRate = traits.regrowth
+		population.spreadProbability = traits.spreadProbability
+		population.nutritionalYield = traits.nutrition
+		population.recoveryReserve -= amount
+		population.dormantTicks = 0
+		freeCapacity -= amount
+		recovered[species] = amount
+	}
+	return recovered
+}
+
+// clearLivingPlant removes a colony while preserving any founder's dormant roots.
+func clearLivingPlant(population *plantPopulation) {
+	if population == nil {
+		return
+	}
+	eligible, reserve := population.recoveryEligible, population.recoveryReserve
+	dormantTicks := population.dormantTicks
+	*population = plantPopulation{
+		recoveryEligible: eligible,
+		recoveryReserve:  reserve,
+		dormantTicks:     dormantTicks,
+	}
 }
 
 func maxFloat(a, b float64) float64 {

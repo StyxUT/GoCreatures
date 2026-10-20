@@ -2,12 +2,14 @@
 
 Each map cell has one shared biomass capacity of 100 units and three fixed
 species slots, ordered grass, clover, bramble. A species slot with positive
-biomass is a local colony; zero biomass means no colony and does not regrow
-spontaneously. `PlantCellAt` returns a detached `PlantCellState` value snapshot
+biomass is a living local colony. A zero-biomass slot is not an occupied colony,
+but may retain dormant recovery metadata at an original seed location.
+`PlantCellAt` returns a detached `PlantCellState` value snapshot
 with the shared capacity and, for each species, identity, presence, biomass,
 generation, growth progress, regrowth rate, spread probability and nutritional
-yield. The snapshot is the stable read contract for renderers and later
-propagation work; mutating it does not change simulation state.
+yield, plus recovery eligibility, remaining reserve and dormant ticks. The
+snapshot is the stable read contract for renderers and propagation; mutating it
+does not change simulation state.
 
 | Species | Regrowth per tick | Spread probability | Spread threshold | Nutrition per biomass |
 | --- | ---: | ---: | ---: | ---: |
@@ -43,10 +45,26 @@ probability, and herbivore intake and seeking use its nutritional yield.
 Ordinary regrowth, failed attempts and occupied-target rejection do not mutate.
 
 When grazing or propagation reduces a local colony to zero, its cohort and
-generation are discarded. Recolonization creates a new daughter from the
-successful parent, not from stale state at the empty target. One cohort per
+generation are discarded. Only positive-biomass species/location pairs created
+by initial seeding (center or halo) receive a separate, dormant 10-biomass
+recovery reserve. After 20 ticks at zero biomass, up to 5 reserve biomass
+recovers, limited by available shared cell capacity. A depleted reserve is never
+replenished; two full recoveries exhaust it. Recovery resets the living cohort
+to baseline traits and generation zero, and is not a daughter establishment.
+Dormant reserve is not edible biomass or an occupied colony. Later spread and
+mutation do not grant recovery eligibility to new locations or species.
+Recolonization retains any reserve already belonging to the target location but
+creates a living daughter from the successful parent. One living cohort per
 species per cell is a deliberate simplification; species identity and renderer
 texture never mutate.
+
+`BiomassAdded = BiomassRegrown + BiomassRecovered`. Tick and cumulative reports
+expose ordinary regrowth separately from dormant recovery. Recovery is also
+reported separately per species as event counts (`PlantRecoveries`) and
+biomass (`PlantBiomassRecovered`); it is not a spread transfer or establishment.
+Transfers conserve biomass, and recovery
+requires a zero-biomass tick-start colony, so it cannot join a same-tick spread
+cascade.
 
 In a deterministic sample of 100,000 grass inheritance draws (seed 20261019),
 101 cohorts mutated (0.101%). These draws exercise the same inheritance helper

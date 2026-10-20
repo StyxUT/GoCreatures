@@ -125,6 +125,15 @@ survived through tick 500 in all five runs in both versions. Replay trajectories
 remain identical per seed; these small-sample results are comparative diagnostics,
 not evidence of stable equilibrium.
 
+The recovery diagnostic runs those same seeds in paired 500-tick worlds, disabling
+only initial recovery metadata in each baseline. Recovery raised summed final
+plant biomass from 5,876 to 7,240 and total biomass added from 5,380 to 6,534;
+plant consumption fell from 2,854 to 2,643. Carnivores survived in all five
+worlds in both variants, while summed creature counts were 65 without recovery
+and 61 with it (herbivore births 39 versus 36). The run is deterministic and
+shows higher vegetation persistence in these samples, not guaranteed coexistence
+or equilibrium.
+
 ## Reproduction diagnostics
 
 Tick reports show separate herbivore and carnivore reproduction counters.
@@ -156,9 +165,17 @@ respectively, targeting one uniformly selected cardinal/four-neighbor/eight
 neighbor-within-distance-two offset. Establishment requires a free species slot,
 one biomass unit of source and destination capacity; that unit transfers from
 parent to daughter colony. Tick-start snapshots prevent same-tick cascades.
-Growth (`BiomassAdded`), establishment transfers (`BiomassTransferred`) and
-grazing (`BiomassConsumed`) are accounted separately. Empty regions and extinct
-species do not spontaneously reappear.
+`BiomassAdded = BiomassRegrown + BiomassRecovered`; establishment transfers
+(`BiomassTransferred`), recovery event counts (`PlantRecoveries`), recovered
+biomass (`PlantBiomassRecovered`) and grazing (`BiomassConsumed`) remain separately
+accounted. Only species/location pairs
+with positive biomass at initial seeding have dormant reserves: after 20 ticks
+at zero biomass, they can recover up to 5 biomass from a finite 10-biomass
+reserve, subject to shared capacity. Recovery restores baseline traits at
+generation zero and does not count as a daughter establishment. Reserves never
+replenish; spread descendants and unseeded species cannot acquire recovery
+eligibility, so empty regions outside original seed locations require incoming
+spread to return.
 
 ## Plant settings and reports
 

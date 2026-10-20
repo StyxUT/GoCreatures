@@ -16,8 +16,8 @@ func collectAncestryStats(env [][]environment, ancestryStats *[]AncestryStats) {
 }
 
 func printTickStats(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals) {
-	fmt.Printf("Tick: %d | TotalDeaths: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d \n\rBiomassAdded: %.2f | BiomassTransferred: %.2f | BiomassConsumed: %.2f | Meat: %.1f | Clones: %d | Eats: %d | Moves: %d | Fights: %d | Sleeps: %d\r\n",
-		tickStats.Tick, tickStats.TotalDeaths, tickStats.AgeDeaths, tickStats.StarvationDeaths, tickStats.FightDeaths, tickStats.BiomassAdded, tickStats.BiomassTransferred[PlantGrass]+tickStats.BiomassTransferred[PlantClover]+tickStats.BiomassTransferred[PlantBramble], tickStats.BiomassConsumed, tickStats.CarcassEnergyEaten, tickStats.Clones, tickStats.Eats, tickStats.Moves, tickStats.Fights, tickStats.Sleeps)
+	fmt.Printf("Tick: %d | TotalDeaths: %d | AgeDeaths: %d | StarvationDeaths: %d | FightDeaths: %d \n\rBiomassAdded: %.2f (regrowth %.2f + recovery %.2f) | BiomassTransferred: %.2f | BiomassConsumed: %.2f | Meat: %.1f | Clones: %d | Eats: %d | Moves: %d | Fights: %d | Sleeps: %d\r\n",
+		tickStats.Tick, tickStats.TotalDeaths, tickStats.AgeDeaths, tickStats.StarvationDeaths, tickStats.FightDeaths, tickStats.BiomassAdded, tickStats.BiomassRegrown, tickStats.BiomassRecovered, tickStats.BiomassTransferred[PlantGrass]+tickStats.BiomassTransferred[PlantClover]+tickStats.BiomassTransferred[PlantBramble], tickStats.BiomassConsumed, tickStats.CarcassEnergyEaten, tickStats.Clones, tickStats.Eats, tickStats.Moves, tickStats.Fights, tickStats.Sleeps)
 	fmt.Printf("Creatures: %d | Carnivores: %d | Herbivores: %d\r\n", tickStats.TotalCreatures, tickStats.TotalCarnivores, tickStats.TotalHerbivores)
 	fmt.Print(formatReproductionStats(tickStats))
 	fmt.Print(formatPlantStats(tickStats))
@@ -69,18 +69,21 @@ func formatPlantStats(stats *TickStats) string {
 			output.WriteString(" | ")
 		}
 		fmt.Fprintf(&output,
-			"%s: %.2f (%d cells) | established %d | mutations %d | transferred %.2f | consumed %.2f | regrowth %.6f | spread %.6f | yield %.3f",
+			"%s: %.2f (%d cells) | established %d | mutations %d | transferred %.2f | recovered %d events / %.2f | consumed %.2f | regrowth %.6f | spread %.6f | yield %.3f",
 			names[species], stats.PlantBiomass[species], stats.PlantOccupiedCells[species],
 			stats.PlantEstablishments[species], stats.PlantMutations[species],
-			stats.BiomassTransferred[species], stats.PlantBiomassConsumed[species],
+			stats.BiomassTransferred[species], stats.PlantRecoveries[species], stats.PlantBiomassRecovered[species], stats.PlantBiomassConsumed[species],
 			trait.RegrowthRate, trait.SpreadProbability, trait.NutritionalYield)
 	}
 	output.WriteString("\r\n")
 	fmt.Fprintf(&output,
-		"Cumulative establishments: grass %d, clover %d, bramble %d | mutations: grass %d, clover %d, bramble %d | growth %.2f | transferred %.2f | consumed %.2f\r\n",
+		"Cumulative establishments: grass %d, clover %d, bramble %d | mutations: grass %d, clover %d, bramble %d | recovery events grass/clover/bramble %d/%d/%d, biomass %.2f/%.2f/%.2f | added %.2f (regrowth %.2f) | transferred %.2f | consumed %.2f\r\n",
 		stats.PlantCumulative.Establishments[PlantGrass], stats.PlantCumulative.Establishments[PlantClover], stats.PlantCumulative.Establishments[PlantBramble],
 		stats.PlantCumulative.Mutations[PlantGrass], stats.PlantCumulative.Mutations[PlantClover], stats.PlantCumulative.Mutations[PlantBramble],
+		stats.PlantCumulative.Recoveries[PlantGrass], stats.PlantCumulative.Recoveries[PlantClover], stats.PlantCumulative.Recoveries[PlantBramble],
+		stats.PlantCumulative.BiomassRecovered[PlantGrass], stats.PlantCumulative.BiomassRecovered[PlantClover], stats.PlantCumulative.BiomassRecovered[PlantBramble],
 		stats.PlantCumulative.BiomassAdded,
+		stats.PlantCumulative.BiomassRegrown,
 		stats.PlantCumulative.BiomassTransferred[PlantGrass]+stats.PlantCumulative.BiomassTransferred[PlantClover]+stats.PlantCumulative.BiomassTransferred[PlantBramble],
 		stats.PlantCumulative.BiomassConsumed[PlantGrass]+stats.PlantCumulative.BiomassConsumed[PlantClover]+stats.PlantCumulative.BiomassConsumed[PlantBramble])
 	return output.String()
