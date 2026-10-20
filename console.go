@@ -30,6 +30,8 @@ func startKeyListener() {
 					continue
 				}
 				switch buf[0] {
+				case 'r', 'R':
+					atomic.StoreInt32(&reproductionReport, 1-atomic.LoadInt32(&reproductionReport))
 				case ' ':
 					atomic.StoreInt32(&paused, 1-atomic.LoadInt32(&paused))
 					if atomic.LoadInt32(&paused) == 1 {

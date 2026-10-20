@@ -152,3 +152,19 @@ func TestReproductionReportingDoesNotConsumeRandomness(t *testing.T) {
 		t.Fatalf("reporting changed the random stream: got %d, want %d", got, want)
 	}
 }
+
+func TestReproductionReportReplacesNormalReportWithoutChangingStats(t *testing.T) {
+	stats := &TickStats{Tick: 7, TotalCreatures: 9}
+	stats.Reproduction[herbivoreReproductionIndex] = ReproductionStats{Evaluated: 2}
+	before := *stats
+	output := captureStdout(t, func() { printSelectedReport(stats, nil, true) })
+	if !strings.Contains(output, "Reproduction Herbivore | tick evaluated 2") || !strings.Contains(output, "Reproduction Carnivore | tick evaluated 0") {
+		t.Fatalf("reproduction report missing: %q", output)
+	}
+	if strings.Contains(output, "Tick:") || strings.Contains(output, "Plant Grass") {
+		t.Fatalf("reproduction report did not replace normal report: %q", output)
+	}
+	if *stats != before {
+		t.Fatal("displaying reproduction report changed simulation statistics")
+	}
+}

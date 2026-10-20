@@ -26,6 +26,18 @@ func printTickStats(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals
 	}
 }
 
+func printReproductionStats(tickStats *TickStats) {
+	fmt.Print(formatReproductionStats(tickStats))
+}
+
+func printSelectedReport(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals, reproductionOnly bool) {
+	if reproductionOnly {
+		printReproductionStats(tickStats)
+		return
+	}
+	printTickStats(tickStats, carnivoreTotals)
+}
+
 func formatReproductionStats(stats *TickStats) string {
 	names := [reproductionDietCount]string{"Herbivore", "Carnivore"}
 	var output strings.Builder
