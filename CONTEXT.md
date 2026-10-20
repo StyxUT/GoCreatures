@@ -78,11 +78,12 @@ so choosing to flee does not guarantee evading an attack already in range.
 Reproduction requires health above 70%, age between 20% and 90% of maximum,
 nutrition of at least 70% of maximum, and no active cooldown. Establishing a clone
 transfers 20% of the parent's maximum nutrition to the offspring; both parent and
-offspring receive a 20-tick herbivore or 40-tick carnivore cooldown. Reproduction
-also requires locally observable food per living same-diet creature: plant value
-of at least 6 times the herbivore's maximum nutrition, or prey/carcass value of
-at least half the carnivore's maximum nutrition. These are decision thresholds,
-not guarantees that food will remain available through the cooldown.
+offspring receive a 20-tick herbivore or 40-tick carnivore cooldown. Locally
+observable plant or prey/carcass value per living same-diet creature adjusts the
+eligible parent's breeding chance smoothly from a 5% floor toward an 80% ceiling.
+The curve is `5% + 75% * ratio / (1 + ratio)`, where ratio is food per competitor
+divided by the parent's maximum nutrition. Thus more food raises the chance and
+more competition lowers it, while stored energy remains the primary prerequisite.
 
 Herbivores feed locally while at or below 80% nutrition to build a breeding
 reserve above the 70% clone minimum. Once eligible to clone, reproduction takes
@@ -116,6 +117,13 @@ does not establish a stable equilibrium. The diagnostic logs 100-tick
 population/plant trajectories, births and deaths by diet, plant growth/consumption,
 carcass energy eaten and first extinction ticks so future tuning can compare
 seeds rather than infer equilibrium from a single simulation.
+
+After replacing the binary local-food gates with the gradual breeding chance,
+the same five seeds produced 39 herbivore births and 65 creatures at tick 500,
+compared with 35 births and 61 creatures under the prior hard gates. Carnivores
+survived through tick 500 in all five runs in both versions. Replay trajectories
+remain identical per seed; these small-sample results are comparative diagnostics,
+not evidence of stable equilibrium.
 
 ## Plant ecology
 

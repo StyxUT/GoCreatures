@@ -25,7 +25,8 @@ const (
 	carnivoreCloneCooldown          = 40
 	cloneEnergyFraction             = 0.2
 	cloneNutritionReserve           = 0.5
-	cloneFoodPerHerbivoreFraction   = 6.0
+	breedingChanceFloor             = 0.05
+	breedingChanceCeiling           = 0.8
 )
 
 func cloneCooldownFor(creature *Creature) int {
@@ -44,10 +45,28 @@ func canReproduce(c *Creature, env [][]environment, pctHealth, pctAge float64) b
 	if c.nutrition < minimumEnergy || c.nutrition < budget {
 		return false
 	}
-	if c.isCarnivore() {
-		return observablePreyValue(c, env)/float64(observableCarnivoreCount(c, env)) >= float64(c.maxNutrition)*cloneNutritionReserve
+	return true
+}
+
+// breedingProbability maps observed food per same-diet competitor to a bounded
+// chance, preserving a small replacement chance even when food is scarce.
+func breedingProbability(food float64, competitors, maxNutrition int) float64 {
+	if competitors < 1 {
+		competitors = 1
 	}
-	return observablePlantValue(c, env)/float64(observableHerbivoreCount(c, env)) >= float64(c.maxNutrition)*cloneFoodPerHerbivoreFraction
+	if maxNutrition <= 0 {
+		return 0
+	}
+	foodPerCompetitor := maxFloat(food, 0) / float64(competitors)
+	ratio := foodPerCompetitor / float64(maxNutrition)
+	return breedingChanceFloor + (breedingChanceCeiling-breedingChanceFloor)*ratio/(1+ratio)
+}
+
+func reproductionProbability(c *Creature, env [][]environment) float64 {
+	if c.isCarnivore() {
+		return breedingProbability(observablePreyValue(c, env), observableCarnivoreCount(c, env), c.maxNutrition)
+	}
+	return breedingProbability(observablePlantValue(c, env), observableHerbivoreCount(c, env), c.maxNutrition)
 }
 
 func observableHerbivoreCount(creature *Creature, env [][]environment) int {
@@ -263,7 +282,7 @@ func decideHerbivoreAction(c *Creature, env [][]environment, location environmen
 		}
 	}
 
-	if canReproduce(c, env, pctHealth, pctAge) && pctNutrition > herbivoreCriticalHungerPercent {
+	if canReproduce(c, env, pctHealth, pctAge) && pctNutrition > herbivoreCriticalHungerPercent && RandFloat64() < reproductionProbability(c, env) {
 		return ActionIntent{Creature: c, Type: "clone"}
 	}
 
@@ -357,7 +376,7 @@ func decideCarnivoreAction(c *Creature, env [][]environment, location environmen
 			return ActionIntent{Creature: c, Type: "fight", TargetCreature: adjacentTarget}
 		}
 	}
-	if canReproduce(c, env, pctHealth, pctAge) && pctNutrition > carnivoreCriticalNutrition {
+	if canReproduce(c, env, pctHealth, pctAge) && pctNutrition > carnivoreCriticalNutrition && RandFloat64() < reproductionProbability(c, env) {
 		return ActionIntent{Creature: c, Type: "clone"}
 	}
 

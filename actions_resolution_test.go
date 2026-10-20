@@ -523,6 +523,7 @@ func TestDecideAction_CarnivoreDoesNotCloneAheadOfFeedingOrWithoutFood(t *testin
 }
 
 func TestReproductionRequiresNutritionLocalFoodAndExpiredCooldown(t *testing.T) {
+	ResetRand(2)
 	env := make([][]environment, 3)
 	for y := range env {
 		env[y] = make([]environment, 3)
@@ -552,8 +553,9 @@ func TestReproductionRequiresNutritionLocalFoodAndExpiredCooldown(t *testing.T) 
 	}
 	parent.nutrition = 80
 	env[1][1].creatureList = append(env[1][1].creatureList, &Creature{diet: DietHerbivore, health: 100}, &Creature{diet: DietHerbivore, health: 100})
-	if intent := parent.decideAction(env); intent.Type == "clone" {
-		t.Fatalf("crowded food supply did not suppress reproduction: %+v", intent)
+	ResetRand(2)
+	if intent := parent.decideAction(env); intent.Type != "clone" {
+		t.Fatalf("competition should reduce but not categorically bar breeding: %+v", intent)
 	}
 }
 
@@ -572,7 +574,25 @@ func TestHerbivoreBuildsBreedingReserveAndReproduces(t *testing.T) {
 	}
 }
 
+func TestBreedingChanceRespondsGraduallyToFoodAndCompetition(t *testing.T) {
+	noFood := breedingProbability(0, 1, 500)
+	scarceFood := breedingProbability(250, 1, 500)
+	ampleFood := breedingProbability(2500, 1, 500)
+	competedFood := breedingProbability(2500, 2, 500)
+
+	if noFood <= 0 || noFood >= 1 || ampleFood >= 1 {
+		t.Fatalf("breeding chances must remain bounded and nonzero without food: none=%f ample=%f", noFood, ampleFood)
+	}
+	if !(noFood < scarceFood && scarceFood < ampleFood) {
+		t.Fatalf("more food should gradually increase breeding chance: none=%f scarce=%f ample=%f", noFood, scarceFood, ampleFood)
+	}
+	if competedFood >= ampleFood {
+		t.Fatalf("more competitors should reduce breeding chance: alone=%f competed=%f", ampleFood, competedFood)
+	}
+}
+
 func TestReproductionCooldownBlocksConfiguredNumberOfTicks(t *testing.T) {
+	ResetRand(1)
 	env := [][]environment{{{capacity: plantCellCapacity, plants: [plantSpeciesCount]plantPopulation{{biomass: 100, nutritionalYield: 15}}}}}
 	parent := &Creature{X: 0, Y: 0, health: 100, maxHealth: 100, nutrition: 100, maxNutrition: 100, age: 30, maxAge: 100, diet: DietHerbivore, ancestor: &Creature{num: 1}, cloneCooldown: herbivoreCloneCooldown + 1}
 	env[0][0].creatureList = []*Creature{parent}
