@@ -84,6 +84,10 @@ of at least 6 times the herbivore's maximum nutrition, or prey/carcass value of
 at least half the carnivore's maximum nutrition. These are decision thresholds,
 not guarantees that food will remain available through the cooldown.
 
+Herbivores feed locally while at or below 80% nutrition to build a breeding
+reserve above the 70% clone minimum. Once eligible to clone, reproduction takes
+priority over feeding so the reserve target cannot postpone offspring indefinitely.
+
 A carnivore kill creates a carcass worth 50% of the larger of prey maximum health
 and maximum nutrition. Carcasses lose 5% of their remaining energy per tick. A
 carnivore meal transfers at most 10% of its maximum nutrition (at least one

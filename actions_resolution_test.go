@@ -557,6 +557,21 @@ func TestReproductionRequiresNutritionLocalFoodAndExpiredCooldown(t *testing.T) 
 	}
 }
 
+func TestHerbivoreBuildsBreedingReserveAndReproduces(t *testing.T) {
+	env := [][]environment{{{capacity: plantCellCapacity, plants: [plantSpeciesCount]plantPopulation{{biomass: 1000, nutritionalYield: 15}}}}}
+	parent := &Creature{X: 0, Y: 0, health: 100, maxHealth: 100, nutrition: 200, maxNutrition: 500, age: 30, maxAge: 100, diet: DietHerbivore, ancestor: &Creature{num: 1}}
+	env[0][0].creatureList = []*Creature{parent}
+	stats := &TickStats{}
+	factory := CreatureFactory()
+
+	for tick := 0; tick < 20 && stats.Clones == 0; tick++ {
+		simulateTick(env, factory.create, stats, nil)
+	}
+	if stats.Clones == 0 {
+		t.Fatalf("healthy herbivore did not reproduce from accessible food: nutrition=%d biomass=%.2f intent=%+v", parent.nutrition, env[0][0].plants[PlantGrass].biomass, parent.decideAction(env))
+	}
+}
+
 func TestReproductionCooldownBlocksConfiguredNumberOfTicks(t *testing.T) {
 	env := [][]environment{{{capacity: plantCellCapacity, plants: [plantSpeciesCount]plantPopulation{{biomass: 100, nutritionalYield: 15}}}}}
 	parent := &Creature{X: 0, Y: 0, health: 100, maxHealth: 100, nutrition: 100, maxNutrition: 100, age: 30, maxAge: 100, diet: DietHerbivore, ancestor: &Creature{num: 1}, cloneCooldown: herbivoreCloneCooldown + 1}

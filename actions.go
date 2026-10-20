@@ -19,11 +19,13 @@ const (
 	carnivoreRetreatHealth         = 35
 	herbivoreCriticalHungerPercent = 15
 	herbivoreStarvationRiskPercent = 5
-	herbivoreCloneCooldown         = 20
-	carnivoreCloneCooldown         = 40
-	cloneEnergyFraction            = 0.2
-	cloneNutritionReserve          = 0.5
-	cloneFoodPerHerbivoreFraction  = 6.0
+	// Herbivores feed through the 70% reproduction minimum; once eligible, cloning takes priority.
+	herbivoreBreedingReservePercent = 80
+	herbivoreCloneCooldown          = 20
+	carnivoreCloneCooldown          = 40
+	cloneEnergyFraction             = 0.2
+	cloneNutritionReserve           = 0.5
+	cloneFoodPerHerbivoreFraction   = 6.0
 )
 
 func cloneCooldownFor(creature *Creature) int {
@@ -261,16 +263,16 @@ func decideHerbivoreAction(c *Creature, env [][]environment, location environmen
 		}
 	}
 
-	// If nutrition is low and a local plant population is available, eat.
-	if !c.isCarnivore() && pctNutrition <= 40 && plantBiomassAvailable(&env[c.Y][c.X]) > 0 {
+	if canReproduce(c, env, pctHealth, pctAge) && pctNutrition > herbivoreCriticalHungerPercent {
+		return ActionIntent{Creature: c, Type: "clone"}
+	}
+
+	// Feed toward a breeding reserve above the 70% clone minimum.
+	if !c.isCarnivore() && pctNutrition <= herbivoreBreedingReservePercent && plantBiomassAvailable(&env[c.Y][c.X]) > 0 {
 		return ActionIntent{
 			Creature: c,
 			Type:     "eat",
 		}
-	}
-
-	if canReproduce(c, env, pctHealth, pctAge) && pctNutrition > herbivoreCriticalHungerPercent {
-		return ActionIntent{Creature: c, Type: "clone"}
 	}
 
 	// If crowded move toward an empty location
