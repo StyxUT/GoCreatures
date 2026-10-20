@@ -30,12 +30,53 @@ func printReproductionStats(tickStats *TickStats) {
 	fmt.Print(formatReproductionStats(tickStats))
 }
 
-func printSelectedReport(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals, reproductionOnly bool) {
-	if reproductionOnly {
+type reportView int32
+
+const (
+	reportViewNormal reportView = iota
+	reportViewReproduction
+	reportViewHelp
+)
+
+func printSelectedReport(tickStats *TickStats, carnivoreTotals *CarnivoreActionTotals, view reportView, width int) {
+	if view == reportViewHelp {
+		fmt.Print(formatInteractiveHelp(width))
+		return
+	}
+	if view == reportViewReproduction {
 		printReproductionStats(tickStats)
 		return
 	}
 	printTickStats(tickStats, carnivoreTotals)
+}
+
+func formatInteractiveHelp(width int) string {
+	if width <= 0 {
+		width = 81
+	}
+	paragraphs := []string{
+		"Space pause/resume | Up/Down speed up/slow down | 'e' exit",
+		"'c' queues Carnivore spawn | 'h' queues Herbivore spawn",
+		"'?' help | 'r' reproduction report",
+		"Plant legend: Grass |I Clover *o@ Bramble :xX#",
+	}
+	var output strings.Builder
+	for _, paragraph := range paragraphs {
+		words := strings.Fields(paragraph)
+		line := ""
+		for _, word := range words {
+			if line != "" && len(line)+1+len(word) > width {
+				output.WriteString(line + "\r\n")
+				line = ""
+			}
+			if line != "" {
+				line += " "
+			}
+			line += word
+		}
+		output.WriteString(line + "\r\n")
+	}
+	return output.String()
 }
 
 func formatReproductionStats(stats *TickStats) string {

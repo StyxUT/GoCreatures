@@ -201,7 +201,7 @@ var safeRunes []rune
 var nextRuneIndex int
 var isTest bool = false
 var paused int32
-var reproductionReport int32
+var currentReportView int32
 var tickIntervalMillis int64 = 300
 var exitCh = make(chan struct{})
 var tickSpeedCh = make(chan time.Duration, 1)
@@ -254,16 +254,16 @@ func main() {
 			simulateTick(env, creatureFac.create, &tickStats, &carnivoreTotals)
 			collectAncestryStats(env, &ancestryStats)
 			printMap(env)
-			printSelectedReport(&tickStats, &carnivoreTotals, atomic.LoadInt32(&reproductionReport) == 1)
+			width, _, err := term.GetSize(int(os.Stdout.Fd()))
+			if err != nil {
+				width = 81
+			}
+			printSelectedReport(&tickStats, &carnivoreTotals, reportView(atomic.LoadInt32(&currentReportView)), width)
 
 			fmt.Print("\r\n*** Ancestor Leaderboard ***\r\n")
 			printAncestryStats(&ancestryStats)
 			fmt.Print("\r\nPress <space> to pause or 'e' to exit")
 			fmt.Printf("\r\nUp/Down arrows adjust speed (%dms/tick)", currentTickInterval()/time.Millisecond)
-			width, _, err := term.GetSize(int(os.Stdout.Fd()))
-			if err != nil {
-				width = 81
-			}
 			fmt.Printf("\r\n%s", formatSpawnControlLine(width))
 
 			if len(ancestryStats) <= 1 {

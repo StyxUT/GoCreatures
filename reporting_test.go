@@ -176,6 +176,28 @@ func TestSpawnControlLineRightAlignsVegetationLegend(t *testing.T) {
 	}
 }
 
+func TestInteractiveHelpReplacesReportAndFitsTerminal(t *testing.T) {
+	for _, width := range []int{40, 81, 120} {
+		lines := strings.Split(strings.TrimSuffix(formatInteractiveHelp(width), "\r\n"), "\r\n")
+		for _, line := range lines {
+			if len(line) > width {
+				t.Errorf("help line exceeds width %d: %q", width, line)
+			}
+		}
+	}
+	help := formatInteractiveHelp(81)
+	for _, required := range []string{"Space pause/resume", "Up/Down speed", "'e' exit", "'c' queues Carnivore", "'h' queues Herbivore", "'?' help", "'r' reproduction", "Grass |I", "Clover *o@", "Bramble :xX#"} {
+		if !strings.Contains(help, required) {
+			t.Errorf("help missing %q: %s", required, help)
+		}
+	}
+	stats := &TickStats{Tick: 4}
+	output := captureStdout(t, func() { printSelectedReport(stats, nil, reportViewHelp, 81) })
+	if !strings.Contains(output, "Space pause/resume") || strings.Contains(output, "Tick:") {
+		t.Fatalf("help did not replace normal report: %q", output)
+	}
+}
+
 func TestSimulationPlantReportsAreFinalSnapshotsWithCumulativeEvents(t *testing.T) {
 	ResetRand(304)
 	env := [][]environment{{

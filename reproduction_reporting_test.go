@@ -157,7 +157,7 @@ func TestReproductionReportReplacesNormalReportWithoutChangingStats(t *testing.T
 	stats := &TickStats{Tick: 7, TotalCreatures: 9}
 	stats.Reproduction[herbivoreReproductionIndex] = ReproductionStats{Evaluated: 2}
 	before := *stats
-	output := captureStdout(t, func() { printSelectedReport(stats, nil, true) })
+	output := captureStdout(t, func() { printSelectedReport(stats, nil, reportViewReproduction, 81) })
 	if !strings.Contains(output, "Reproduction Herbivore | tick evaluated 2") || !strings.Contains(output, "Reproduction Carnivore | tick evaluated 0") {
 		t.Fatalf("reproduction report missing: %q", output)
 	}
