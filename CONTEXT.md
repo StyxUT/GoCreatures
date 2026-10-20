@@ -160,7 +160,7 @@ Each cell has a shared capacity of 100 biomass units. Founding patches use up to
 `6 * max(1, ceil(cellCount/300))` centers per species, with 20 biomass at a center
 and 5 in each in-bounds cardinal halo cell; overlapping requests are scaled to
 fit capacity. Each tick snapshots vegetation, accumulates fractional growth
-from existing colonies at grass/clover/bramble rates 0.08/0.04/0.02 scaled by
+from existing colonies at grass/clover/bramble rates 0.088/0.044/0.022 scaled by
 the free-capacity fraction, then resolves local spread intents. Eligible
 colonies (20/30/40 biomass) attempt spread with probability 0.02/0.01/0.005
 respectively, targeting one uniformly selected cardinal/four-neighbor/eight
@@ -183,9 +183,9 @@ spread to return.
 
 | Species | Regrowth / tick | Nutrition / biomass | Spread threshold | Attempt / eligible tick | Neighborhood |
 | --- | ---: | ---: | ---: | ---: | --- |
-| Grass | 0.08 | 15 | 20 | 0.02 | cardinal |
-| Clover | 0.04 | 20 | 30 | 0.01 | eight adjacent cells |
-| Bramble | 0.02 | 10 | 40 | 0.005 | within Chebyshev distance two |
+| Grass | 0.088 | 15 | 20 | 0.02 | cardinal |
+| Clover | 0.044 | 20 | 30 | 0.01 | eight adjacent cells |
+| Bramble | 0.022 | 10 | 40 | 0.005 | within Chebyshev distance two |
 
 Each successful establishment copies the parent's local cohort and has a 0.001
 mutation probability. At most one of regrowth, spread probability or nutrition

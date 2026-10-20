@@ -469,7 +469,7 @@ func TestPlantEstablishmentMutatesAtMostOneTraitWithinBounds(t *testing.T) {
 		t.Fatalf("daughter mutation changed its parent cohort: %+v", got)
 	}
 	base := plantTraits[PlantGrass]
-	if base.regrowth != 0.08 || base.spreadProbability != 0.02 || base.nutrition != 15 {
+	if base.regrowth != 0.088 || base.spreadProbability != 0.02 || base.nutrition != 15 {
 		t.Fatalf("daughter mutation changed species baselines: %+v", base)
 	}
 }

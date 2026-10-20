@@ -13,9 +13,9 @@ does not change simulation state.
 
 | Species | Regrowth per tick | Spread probability | Spread threshold | Nutrition per biomass |
 | --- | ---: | ---: | ---: | ---: |
-| Grass | 0.08 | 0.02 | 20 | 15 |
-| Clover | 0.04 | 0.01 | 30 | 20 |
-| Bramble | 0.02 | 0.005 | 40 | 10 |
+| Grass | 0.088 | 0.02 | 20 | 15 |
+| Clover | 0.044 | 0.01 | 30 | 20 |
+| Bramble | 0.022 | 0.005 | 40 | 10 |
 
 Initial maps seed `6 * max(1, ceil(cellCount/300))` center cells per species. A
 center receives 20 biomass and its in-bounds cardinal halo cells receive 5.

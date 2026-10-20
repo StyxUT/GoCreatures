@@ -154,9 +154,9 @@ var plantTraits = [plantSpeciesCount]struct {
 	spreadProbability float64
 	nutrition         float64
 }{
-	{regrowth: 0.08, spreadProbability: 0.02, nutrition: 15},
-	{regrowth: 0.04, spreadProbability: 0.01, nutrition: 20},
-	{regrowth: 0.02, spreadProbability: 0.005, nutrition: 10},
+	{regrowth: 0.088, spreadProbability: 0.02, nutrition: 15},
+	{regrowth: 0.044, spreadProbability: 0.01, nutrition: 20},
+	{regrowth: 0.022, spreadProbability: 0.005, nutrition: 10},
 }
 
 // PlantCellAt returns a value snapshot in stable grass, clover, bramble order.
