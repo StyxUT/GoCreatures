@@ -62,9 +62,22 @@ func TestSpiralLook2D_N_HighVisionCreature(t *testing.T) {
 		if loc.Env == nil {
 			t.Errorf("nil pointer observed at index %d", i)
 		}
+		if loc.X == cHighVision.X && loc.Y == cHighVision.Y {
+			t.Errorf("current cell was included in observations at index %d", i)
+		}
 		if seen[loc.Env] {
 			t.Errorf("duplicate environment pointer observed at index %d", i)
 		}
 		seen[loc.Env] = true
+	}
+}
+
+func TestSpiralLook2D_N_EmptyWorldAndInvalidPositionAreSafe(t *testing.T) {
+	creature := &Creature{X: 5, Y: 0, observed: []ObservedLocation{{X: 1, Y: 1}}}
+	SpiralLook2D_N(nil, creature)
+	SpiralLook2D_N([][]environment{{}}, creature)
+	SpiralLook2D_N([][]environment{{{}}}, creature)
+	if len(creature.observed) != 0 {
+		t.Fatalf("invalid perception retained stale observations: %+v", creature.observed)
 	}
 }

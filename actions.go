@@ -34,7 +34,7 @@ func cloneCooldownFor(creature *Creature) int {
 }
 
 func canReproduce(c *Creature, env [][]environment, pctHealth, pctAge float64) bool {
-	if c == nil || c.immobileTicks > 0 || c.cloneCooldown > 0 || pctAge <= 20 || pctAge >= 90 || pctHealth <= 70 || c.maxNutrition <= 0 {
+	if c == nil || c.immobileTicks > 0 || c.cloneCooldown > 0 || c.maxAge <= 0 || c.maxHealth <= 0 || pctAge <= 20 || pctAge >= 90 || pctHealth <= 70 || c.maxNutrition <= 0 {
 		return false
 	}
 	budget := int(float64(c.maxNutrition) * cloneEnergyFraction)

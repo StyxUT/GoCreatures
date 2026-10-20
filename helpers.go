@@ -24,21 +24,33 @@ func max(a, b int) int {
 
 // Helper function to view N locations around a starting location and callback
 func SpiralLook2D_N(env [][]environment, c *Creature) {
+	if c == nil {
+		return
+	}
+	if len(env) == 0 || len(env[0]) == 0 {
+		c.observed = c.observed[:0]
+		return
+	}
 	height := len(env)
 	width := len(env[0])
 
 	c.observed = c.observed[:0] // Clear previous observations while reusing slice memory
+	if c.X < 0 || c.X >= width || c.Y < 0 || c.Y >= height {
+		return
+	}
 
 	// Direction vectors: right, down, left, up
 	dx := []int{1, 0, -1, 0}
 	dy := []int{0, 1, 0, -1}
 
 	// Setup
-	n := int(c.vision) // max number of cells to observe
-	x, y := c.X, c.Y   // start at creature's current position
-	viewed := 0        // counter for observed locations
-	stepSize := 1      // number of steps per leg of the spiral
-	dir := 0           // direction index (0:right, 1:down, 2:left, 3:up)
+	n := max(min(int(c.vision), height*width-1), 0) // max unique locations outside the current cell
+	x, y := c.X, c.Y                                // start at creature's current position
+	viewed := 0                                     // counter for observed locations
+	visited := make(map[int]struct{}, n)
+	visited[y*width+x] = struct{}{}
+	stepSize := 1 // number of steps per leg of the spiral
+	dir := 0      // direction index (0:right, 1:down, 2:left, 3:up)
 
 	// Begin spiral outward until N cells are observed or map bounds are exceeded
 	for radius := 1; viewed < n && radius < max(width, height); radius++ {
@@ -49,6 +61,11 @@ func SpiralLook2D_N(env [][]environment, c *Creature) {
 
 				// If within bounds, record the location
 				if x >= 0 && x < width && y >= 0 && y < height {
+					index := y*width + x
+					if _, alreadyObserved := visited[index]; alreadyObserved {
+						continue
+					}
+					visited[index] = struct{}{}
 					c.observed = append(c.observed, ObservedLocation{Env: &env[y][x], X: x, Y: y})
 					viewed++
 					if viewed == n {
