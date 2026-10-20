@@ -505,7 +505,10 @@ func TestDecideAction_CarnivoreAdjacentHerbivoreAttacksImmediately(t *testing.T)
 	}
 }
 
-func TestDecideAction_CarnivoreDoesNotCloneAheadOfFeedingOrWithoutFood(t *testing.T) {
+func TestDecideAction_CarnivoreSleepsWhenBreedingChanceIsRejected(t *testing.T) {
+	previousRand := rng
+	t.Cleanup(func() { SetRand(previousRand) })
+	ResetRand(1) // Reject the nonzero breeding chance around low-value prey.
 	env := make([][]environment, 5)
 	for i := range env {
 		env[i] = make([]environment, 5)
@@ -518,7 +521,7 @@ func TestDecideAction_CarnivoreDoesNotCloneAheadOfFeedingOrWithoutFood(t *testin
 	intent := hunter.decideAction(env)
 
 	if intent.Type != "sleep" {
-		t.Fatalf("expected no reproduction in an unrewarding prey encounter, got %s", intent.Type)
+		t.Fatalf("expected sleep after a rejected breeding draw, got %s", intent.Type)
 	}
 }
 

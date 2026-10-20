@@ -72,6 +72,9 @@ func TestHerbivoreAvoidanceRespectsPerceptionAndImmobility(t *testing.T) {
 	for _, name := range []string{"no predator", "dead predator", "unseen predator", "immobile"} {
 		t.Run(name, func(t *testing.T) {
 			// Arrange.
+			previousRand := rng
+			t.Cleanup(func() { SetRand(previousRand) })
+			ResetRand(2) // Successful breeding draw, independent of other tests.
 			env, c := avoidanceWorld(5, 5, 2, 2)
 			if name != "no predator" {
 				predator := addAvoidancePredator(env, 1, 2)
