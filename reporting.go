@@ -57,8 +57,9 @@ func formatInteractiveHelp(width int) string {
 	paragraphs := []string{
 		"Space pause/resume | Up/Down speed up/slow down | 'e' exit",
 		"'c' queues Carnivore spawn | 'h' queues Herbivore spawn",
-		"'?' help | 'r' reproduction report",
+		"'l' ancestor leaderboard | 'r' reproduction report",
 		"Plant legend: Grass |I Clover *o@ Bramble :xX#",
+		"'?' help",
 	}
 	var output strings.Builder
 	for _, paragraph := range paragraphs {
@@ -156,6 +157,11 @@ func printAncestryStats(ancestryStats *[]AncestryStats) {
 
 		fmt.Printf("%s%d. Ancestor: %s\t| Diet: %s\t| LineageCount: %d\t| Generation: %d\t| MaxHealth: %d\t| MaxAge: %d\t| MaxNutrition: %d\t| Metabolism: %d \t| Aggression: %d \t| Vision: %.2f%s\r\n", color, i+1, charStr, a.Ancestor.dietType(), a.LineageCount, a.Ancestor.generation, a.Ancestor.maxHealth, a.Ancestor.maxAge, a.Ancestor.maxNutrition, a.Ancestor.metabolism, a.Ancestor.aggression, a.Ancestor.vision, reset)
 	}
+}
+
+func printAncestorLeaderboard(ancestryStats *[]AncestryStats) {
+	fmt.Print("\r\n*** Ancestor Leaderboard ***\r\n")
+	printAncestryStats(ancestryStats)
 }
 
 func PrintNewestClones(env [][]environment) {

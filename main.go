@@ -202,6 +202,7 @@ var nextRuneIndex int
 var isTest bool = false
 var paused int32
 var currentReportView int32
+var leaderboardRequestCh = make(chan struct{}, 1)
 var tickIntervalMillis int64 = 300
 var exitCh = make(chan struct{})
 var tickSpeedCh = make(chan time.Duration, 1)
@@ -242,6 +243,8 @@ func main() {
 		case <-exitCh:
 			fmt.Print("\r\nExited simulation.")
 			return
+		case <-leaderboardRequestCh:
+			printAncestorLeaderboard(&ancestryStats)
 		case <-tickCh:
 			processSpawnRequests(env, creatureFac)
 			if atomic.LoadInt32(&paused) == 1 {
@@ -260,8 +263,7 @@ func main() {
 			}
 			printSelectedReport(&tickStats, &carnivoreTotals, reportView(atomic.LoadInt32(&currentReportView)), width)
 
-			fmt.Print("\r\n*** Ancestor Leaderboard ***\r\n")
-			printAncestryStats(&ancestryStats)
+			printAncestorLeaderboard(&ancestryStats)
 			fmt.Print("\r\nPress <space> to pause or 'e' to exit")
 			fmt.Printf("\r\nUp/Down arrows adjust speed (%dms/tick)", currentTickInterval()/time.Millisecond)
 			fmt.Printf("\r\n%s", formatSpawnControlLine(width))

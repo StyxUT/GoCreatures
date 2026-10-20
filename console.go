@@ -34,6 +34,11 @@ func startKeyListener() {
 					atomic.StoreInt32(&currentReportView, int32(reportViewReproduction))
 				case '?':
 					atomic.StoreInt32(&currentReportView, int32(reportViewHelp))
+				case 'l', 'L':
+					select {
+					case leaderboardRequestCh <- struct{}{}:
+					default:
+					}
 				case ' ':
 					atomic.StoreInt32(&paused, 1-atomic.LoadInt32(&paused))
 					if atomic.LoadInt32(&paused) == 1 {

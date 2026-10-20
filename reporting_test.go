@@ -198,6 +198,30 @@ func TestInteractiveHelpReplacesReportAndFitsTerminal(t *testing.T) {
 	}
 }
 
+func TestInteractiveHelpKeepsHelpShortcutLastWhenWrapped(t *testing.T) {
+	for _, width := range []int{20, 40, 81, 120} {
+		lines := strings.Split(strings.TrimSpace(formatInteractiveHelp(width)), "\r\n")
+		if !strings.HasPrefix(lines[len(lines)-1], "'?' help") {
+			t.Errorf("help shortcut is not final at width %d: %q", width, lines)
+		}
+	}
+}
+
+func TestLeaderboardViewUsesCurrentAncestry(t *testing.T) {
+	prior := isTest
+	isTest = true
+	defer func() { isTest = prior }()
+	ancestor := &Creature{generation: 3, maxHealth: 90, maxAge: 80, maxNutrition: 70}
+	ancestry := []AncestryStats{{Ancestor: ancestor, LineageCount: 4}}
+	output := captureStdout(t, func() { printAncestorLeaderboard(&ancestry) })
+	if !strings.Contains(output, "Ancestor Leaderboard") || !strings.Contains(output, "LineageCount: 4") || !strings.Contains(output, "Generation: 3") {
+		t.Fatalf("leaderboard did not show current ancestry data: %q", output)
+	}
+	if ancestry[0].LineageCount != 4 || ancestor.generation != 3 {
+		t.Fatal("displaying leaderboard changed ancestry state")
+	}
+}
+
 func TestSimulationPlantReportsAreFinalSnapshotsWithCumulativeEvents(t *testing.T) {
 	ResetRand(304)
 	env := [][]environment{{
